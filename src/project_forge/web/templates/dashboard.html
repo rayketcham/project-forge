@@ -2,84 +2,85 @@
 {% block title %}Dashboard - Project Forge{% endblock %}
 
 {% block content %}
-<h1>Project Forge Dashboard</h1>
+<section class="hero">
+    <div class="container">
+        <h1 class="hero-title">Your IT Think Tank</h1>
+        <p class="hero-subtitle">{{ stats.total_ideas }} project ideas generated across {{ stats.ideas_by_category | length }} categories. Discover, evaluate, and build the next big thing.</p>
+        <div class="hero-actions">
+            <a href="/explore" class="btn btn-primary btn-lg">Explore Ideas</a>
+            <a href="/explore?category=pqc-cryptography" class="btn btn-outline btn-lg">PQC Security</a>
+        </div>
+    </div>
+</section>
 
-<div class="stats-grid">
-    <div class="stat-card">
-        <div class="stat-number">{{ stats.total_ideas }}</div>
-        <div class="stat-label">Total Ideas</div>
+<section class="stats-section">
+    <div class="container">
+        <div class="stats-grid">
+            <div class="stat-card stat-accent">
+                <div class="stat-number">{{ stats.total_ideas }}</div>
+                <div class="stat-label">Total Ideas</div>
+            </div>
+            <div class="stat-card stat-green">
+                <div class="stat-number">{{ stats.ideas_by_status.get('approved', 0) }}</div>
+                <div class="stat-label">Approved</div>
+            </div>
+            <div class="stat-card stat-purple">
+                <div class="stat-number">{{ stats.ideas_by_status.get('scaffolded', 0) }}</div>
+                <div class="stat-label">Scaffolded</div>
+            </div>
+            <div class="stat-card stat-orange">
+                <div class="stat-number">{{ stats.avg_feasibility_score }}</div>
+                <div class="stat-label">Avg Score</div>
+            </div>
+        </div>
     </div>
-    <div class="stat-card">
-        <div class="stat-number">{{ stats.ideas_by_status.get('new', 0) }}</div>
-        <div class="stat-label">New</div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-number">{{ stats.ideas_by_status.get('approved', 0) }}</div>
-        <div class="stat-label">Approved</div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-number">{{ stats.ideas_by_status.get('scaffolded', 0) }}</div>
-        <div class="stat-label">Scaffolded</div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-number">{{ stats.avg_feasibility_score }}</div>
-        <div class="stat-label">Avg Score</div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-number">{{ stats.total_runs }}</div>
-        <div class="stat-label">Generation Runs</div>
-    </div>
-</div>
+</section>
 
-<h2>Category Distribution</h2>
-<div class="category-grid">
-    {% for cat, count in stats.ideas_by_category.items() %}
-    <div class="category-badge">
-        <span class="badge badge-{{ cat }}">{{ cat }}</span>
-        <span class="badge-count">{{ count }}</span>
-    </div>
-    {% endfor %}
-    {% if not stats.ideas_by_category %}
-    <p class="empty-state">No ideas generated yet. The cron job runs hourly.</p>
-    {% endif %}
-</div>
-
-<h2>Recent Ideas</h2>
-{% if recent_ideas %}
-<div class="ideas-table">
-    <table>
-        <thead>
-            <tr>
-                <th>Name</th>
-                <th>Category</th>
-                <th>Score</th>
-                <th>Status</th>
-                <th>Generated</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for idea in recent_ideas %}
-            <tr>
-                <td><a href="/ideas/{{ idea.id }}">{{ idea.name }}</a></td>
-                <td><span class="badge badge-{{ idea.category.value }}">{{ idea.category.value }}</span></td>
-                <td>{{ score_summary(idea) }}</td>
-                <td><span class="status status-{{ idea.status }}">{{ idea.status }}</span></td>
-                <td>{{ idea.generated_at.strftime('%Y-%m-%d %H:%M') }}</td>
-                <td>
-                    {% if idea.status == 'new' %}
-                    <button class="btn btn-sm btn-approve" onclick="approveIdea('{{ idea.id }}')">Approve</button>
-                    <button class="btn btn-sm btn-reject" onclick="rejectIdea('{{ idea.id }}')">Reject</button>
-                    {% elif idea.status == 'approved' %}
-                    <button class="btn btn-sm btn-scaffold" onclick="scaffoldIdea('{{ idea.id }}')">Scaffold</button>
-                    {% endif %}
-                </td>
-            </tr>
+<section class="section">
+    <div class="container">
+        <div class="section-header">
+            <h2>Top Ideas by Feasibility</h2>
+            <a href="/explore" class="btn btn-sm">View All &rarr;</a>
+        </div>
+        <div class="card-grid">
+            {% for idea in top_ideas %}
+            <a href="/ideas/{{ idea.id }}" class="idea-card">
+                <div class="card-badge">
+                    <span class="badge badge-{{ idea.category.value }}">{{ idea.category.value }}</span>
+                    <span class="score-pill">{{ "%.0f" | format(idea.feasibility_score * 100) }}%</span>
+                </div>
+                <h3 class="card-title">{{ idea.name }}</h3>
+                <p class="card-tagline">{{ idea.tagline }}</p>
+                <div class="card-meta">
+                    <div class="score-bar">
+                        <div class="score-fill" style="width: {{ idea.feasibility_score * 100 }}%"></div>
+                    </div>
+                    <div class="card-tech">
+                        {% for tech in idea.tech_stack[:3] %}
+                        <span class="tech-chip">{{ tech }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+            </a>
             {% endfor %}
-        </tbody>
-    </table>
-</div>
-{% else %}
-<p class="empty-state">No ideas generated yet. Run <code>python -m project_forge.cron.runner</code> or wait for the hourly cron.</p>
-{% endif %}
+        </div>
+    </div>
+</section>
+
+<section class="section section-alt">
+    <div class="container">
+        <div class="section-header">
+            <h2>Browse by Category</h2>
+        </div>
+        <div class="category-cards">
+            {% for cat in categories %}
+            <a href="/explore?category={{ cat.name }}" class="category-card">
+                <div class="cat-count">{{ cat.count }}</div>
+                <div class="cat-name">{{ cat.name }}</div>
+                <div class="cat-score">avg {{ cat.avg_score }}</div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+</section>
 {% endblock %}

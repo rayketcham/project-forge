@@ -2,64 +2,112 @@
 {% block title %}{{ idea.name }} - Project Forge{% endblock %}
 
 {% block content %}
-<div class="idea-header">
-    <h1>{{ idea.name }}</h1>
-    <p class="tagline">{{ idea.tagline }}</p>
-    <div class="idea-meta">
-        <span class="badge badge-{{ idea.category.value }}">{{ idea.category.value }}</span>
-        <span class="status status-{{ idea.status }}">{{ idea.status }}</span>
-        <span class="score">{{ score_summary(idea) }}</span>
-        <span class="date">{{ idea.generated_at.strftime('%Y-%m-%d %H:%M UTC') }}</span>
+<section class="idea-hero">
+    <div class="container">
+        <div class="breadcrumb">
+            <a href="/">Home</a> / <a href="/explore">Explore</a> / <a href="/explore?category={{ idea.category.value }}">{{ idea.category.value }}</a>
+        </div>
+        <div class="idea-hero-content">
+            <div class="idea-hero-text">
+                <span class="badge badge-{{ idea.category.value }} badge-lg">{{ idea.category.value }}</span>
+                <h1>{{ idea.name }}</h1>
+                <p class="idea-tagline">{{ idea.tagline }}</p>
+                <div class="idea-hero-meta">
+                    <div class="score-display">
+                        <div class="score-ring" style="--score: {{ idea.feasibility_score * 100 }}">
+                            <span>{{ "%.0f" | format(idea.feasibility_score * 100) }}%</span>
+                        </div>
+                        <div class="score-label">{{ score_summary(idea) }}</div>
+                    </div>
+                    <span class="status status-{{ idea.status }} status-lg">{{ idea.status }}</span>
+                    <span class="meta-date">{{ idea.generated_at.strftime('%B %d, %Y') }}</span>
+                </div>
+            </div>
+            <div class="idea-hero-actions">
+                {% if idea.status == 'new' %}
+                <button class="btn btn-primary" onclick="approveIdea('{{ idea.id }}')">Approve</button>
+                <button class="btn btn-danger" onclick="rejectIdea('{{ idea.id }}')">Reject</button>
+                {% elif idea.status == 'approved' %}
+                <button class="btn btn-primary" onclick="scaffoldIdea('{{ idea.id }}')">Scaffold Project</button>
+                {% endif %}
+            </div>
+        </div>
     </div>
-</div>
+</section>
 
-<div class="idea-body">
-    <section>
-        <h2>Description</h2>
-        <div class="prose">{{ idea.description }}</div>
-    </section>
+<section class="section">
+    <div class="container">
+        <div class="pitch-grid">
+            <div class="pitch-main">
+                <div class="pitch-card">
+                    <h2>The Problem &amp; Solution</h2>
+                    <div class="prose">{{ idea.description | replace('\n', '<br>') }}</div>
+                </div>
 
-    <section>
-        <h2>Market Analysis</h2>
-        <div class="prose">{{ idea.market_analysis }}</div>
-    </section>
+                <div class="pitch-card">
+                    <h2>Market Analysis</h2>
+                    <div class="prose">{{ idea.market_analysis }}</div>
+                </div>
 
-    <section>
-        <h2>MVP Scope</h2>
-        <div class="prose">{{ idea.mvp_scope }}</div>
-    </section>
+                <div class="pitch-card">
+                    <h2>MVP Scope</h2>
+                    <div class="prose">{{ idea.mvp_scope }}</div>
+                </div>
+            </div>
 
-    <section>
-        <h2>Tech Stack</h2>
-        <div class="tech-stack">
-            {% for tech in idea.tech_stack %}
-            <span class="tech-badge">{{ tech }}</span>
+            <div class="pitch-sidebar">
+                <div class="pitch-card">
+                    <h3>Tech Stack</h3>
+                    <div class="tech-stack-list">
+                        {% for tech in idea.tech_stack %}
+                        <span class="tech-chip tech-chip-lg">{{ tech }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="pitch-card">
+                    <h3>Feasibility</h3>
+                    <div class="score-bar score-bar-lg">
+                        <div class="score-fill" style="width: {{ idea.feasibility_score * 100 }}%"></div>
+                    </div>
+                    <p class="score-text">{{ score_summary(idea) }}</p>
+                </div>
+
+                {% if idea.github_issue_url %}
+                <div class="pitch-card">
+                    <h3>GitHub Issue</h3>
+                    <a href="{{ idea.github_issue_url }}" target="_blank" class="btn btn-outline btn-block">View Issue &rarr;</a>
+                </div>
+                {% endif %}
+
+                {% if idea.project_repo_url %}
+                <div class="pitch-card">
+                    <h3>Repository</h3>
+                    <a href="{{ idea.project_repo_url }}" target="_blank" class="btn btn-primary btn-block">View Repo &rarr;</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</section>
+
+{% if related %}
+<section class="section section-alt">
+    <div class="container">
+        <h2>Related Ideas</h2>
+        <div class="card-grid card-grid-3">
+            {% for r in related %}
+            <a href="/ideas/{{ r.id }}" class="idea-card">
+                <div class="card-badge">
+                    <span class="badge badge-{{ r.category.value }}">{{ r.category.value }}</span>
+                    <span class="score-pill">{{ "%.0f" | format(r.feasibility_score * 100) }}%</span>
+                </div>
+                <h3 class="card-title">{{ r.name }}</h3>
+                <p class="card-tagline">{{ r.tagline }}</p>
+            </a>
             {% endfor %}
         </div>
-    </section>
-
-    {% if idea.github_issue_url %}
-    <section>
-        <h2>GitHub Issue</h2>
-        <a href="{{ idea.github_issue_url }}" target="_blank">{{ idea.github_issue_url }}</a>
-    </section>
-    {% endif %}
-
-    {% if idea.project_repo_url %}
-    <section>
-        <h2>Project Repository</h2>
-        <a href="{{ idea.project_repo_url }}" target="_blank">{{ idea.project_repo_url }}</a>
-    </section>
-    {% endif %}
-</div>
-
-<div class="idea-actions">
-    {% if idea.status == 'new' %}
-    <button class="btn btn-approve" onclick="approveIdea('{{ idea.id }}')">Approve</button>
-    <button class="btn btn-reject" onclick="rejectIdea('{{ idea.id }}')">Reject</button>
-    {% elif idea.status == 'approved' %}
-    <button class="btn btn-scaffold" onclick="scaffoldIdea('{{ idea.id }}')">Scaffold Project</button>
-    {% endif %}
-    <a href="/ideas" class="btn">Back to Ideas</a>
-</div>
+    </div>
+</section>
+{% endif %}
 {% endblock %}

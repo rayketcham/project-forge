@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Explore Ideas - Project Forge{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <div class="container">
+        <h1>Explore Ideas</h1>
+        <p class="page-subtitle">{{ total }} ideas to discover. Filter by category, status, or search.</p>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        <div class="filters-bar">
+            <div class="filter-chips">
+                <a href="/explore" class="chip {% if not category_filter %}chip-active{% endif %}">All</a>
+                {% for cat in categories %}
+                <a href="/explore?category={{ cat.value }}{% if status_filter %}&status={{ status_filter }}{% endif %}"
+                   class="chip chip-{{ cat.value }} {% if category_filter == cat.value %}chip-active{% endif %}">
+                    {{ cat.value }}
+                </a>
+                {% endfor %}
+            </div>
+            <div class="filter-status">
+                <select onchange="window.location='/explore?status='+this.value+'{% if category_filter %}&category={{ category_filter }}{% endif %}'">
+                    <option value="">All Statuses</option>
+                    <option value="new" {% if status_filter == 'new' %}selected{% endif %}>New</option>
+                    <option value="approved" {% if status_filter == 'approved' %}selected{% endif %}>Approved</option>
+                    <option value="scaffolded" {% if status_filter == 'scaffolded' %}selected{% endif %}>Scaffolded</option>
+                    <option value="rejected" {% if status_filter == 'rejected' %}selected{% endif %}>Rejected</option>
+                </select>
+            </div>
+        </div>
+
+        {% if ideas %}
+        <div class="card-grid">
+            {% for idea in ideas %}
+            <a href="/ideas/{{ idea.id }}" class="idea-card">
+                <div class="card-badge">
+                    <span class="badge badge-{{ idea.category.value }}">{{ idea.category.value }}</span>
+                    <span class="score-pill">{{ "%.0f" | format(idea.feasibility_score * 100) }}%</span>
+                </div>
+                <h3 class="card-title">{{ idea.name }}</h3>
+                <p class="card-tagline">{{ idea.tagline }}</p>
+                <div class="card-meta">
+                    <div class="score-bar">
+                        <div class="score-fill" style="width: {{ idea.feasibility_score * 100 }}%"></div>
+                    </div>
+                    <div class="card-tech">
+                        {% for tech in idea.tech_stack[:3] %}
+                        <span class="tech-chip">{{ tech }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <span class="status status-{{ idea.status }}">{{ idea.status }}</span>
+                    <span class="card-date">{{ idea.generated_at.strftime('%b %d') }}</span>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+
+        <div class="pagination">
+            {% if page > 1 %}
+            <a href="/explore?page={{ page - 1 }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if category_filter %}&category={{ category_filter }}{% endif %}{% if search_query %}&q={{ search_query }}{% endif %}" class="btn btn-sm">&larr; Previous</a>
+            {% endif %}
+            <span class="page-info">Page {{ page }} of {{ pages }}</span>
+            {% if page < pages %}
+            <a href="/explore?page={{ page + 1 }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if category_filter %}&category={{ category_filter }}{% endif %}{% if search_query %}&q={{ search_query }}{% endif %}" class="btn btn-sm">Next &rarr;</a>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <h3>No ideas found</h3>
+            <p>Try adjusting your filters or <a href="/explore">view all ideas</a>.</p>
+        </div>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

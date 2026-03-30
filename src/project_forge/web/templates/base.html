@@ -8,22 +8,37 @@
 </head>
 <body>
     <nav class="navbar">
-        <div class="nav-brand">
-            <a href="/">Project Forge</a>
-        </div>
-        <div class="nav-links">
-            <a href="/" class="nav-link">Dashboard</a>
-            <a href="/ideas" class="nav-link">Ideas</a>
-            <a href="/projects" class="nav-link">Projects</a>
-            <a href="/health" class="nav-link">Health</a>
-            <a href="/docs" class="nav-link">API Docs</a>
+        <div class="nav-inner">
+            <a href="/" class="nav-brand">
+                <span class="brand-icon">&#9881;</span> Project Forge
+            </a>
+            <div class="nav-links">
+                <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">Dashboard</a>
+                <a href="/explore" class="nav-link {% if request.url.path == '/explore' or request.url.path == '/ideas' %}active{% endif %}">Explore</a>
+                <a href="/projects" class="nav-link {% if request.url.path == '/projects' %}active{% endif %}">Projects</a>
+                <a href="/docs" class="nav-link">API</a>
+            </div>
+            <div class="nav-search">
+                <form action="/explore" method="get">
+                    <input type="text" name="q" placeholder="Search ideas..." value="{{ search_query|default('') }}" class="search-input">
+                </form>
+            </div>
         </div>
     </nav>
-    <main class="container">
+    <main>
         {% block content %}{% endblock %}
     </main>
     <footer class="footer">
-        <p>Project Forge v0.1.0 | Autonomous IT Think-Tank Engine</p>
+        <div class="container">
+            <p>Project Forge v0.2.0 &mdash; Autonomous IT Think-Tank Engine</p>
+            <p class="footer-links">
+                <a href="https://github.com/rayketcham/project-forge" target="_blank">GitHub</a>
+                <span>&middot;</span>
+                <a href="/health">Health</a>
+                <span>&middot;</span>
+                <a href="/docs">API Docs</a>
+            </p>
+        </div>
     </footer>
     <script src="/static/app.js"></script>
     {% block scripts %}{% endblock %}

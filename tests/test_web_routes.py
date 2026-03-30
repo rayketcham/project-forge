@@ -36,7 +36,7 @@ async def test_dashboard(client):
 async def test_ideas_empty(client):
     resp = await client.get("/ideas")
     assert resp.status_code == 200
-    assert "0 ideas found" in resp.text
+    assert "No ideas found" in resp.text or "0 ideas" in resp.text
 
 
 @pytest.mark.asyncio
