@@ -1,0 +1,16 @@
+[Unit]
+Description=Project Forge Web Dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=claude
+WorkingDirectory=/opt/project-forge
+Environment=FORGE_DB_PATH=/opt/project-forge/data/forge.db
+Environment=FORGE_PORT=55443
+ExecStart=/usr/bin/python3 -m uvicorn project_forge.web.app:app --host 0.0.0.0 --port 55443 --log-level info
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
