@@ -43,7 +43,7 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "S", "B", "UP"]
-ignore = ["S101"]  # allow assert in tests
+ignore = ["S101", "S311"]  # allow assert in tests, random.choice for prompt diversity
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
