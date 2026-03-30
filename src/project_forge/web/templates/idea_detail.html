@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}{{ idea.name }} - Project Forge{% endblock %}
+
+{% block content %}
+<div class="idea-header">
+    <h1>{{ idea.name }}</h1>
+    <p class="tagline">{{ idea.tagline }}</p>
+    <div class="idea-meta">
+        <span class="badge badge-{{ idea.category.value }}">{{ idea.category.value }}</span>
+        <span class="status status-{{ idea.status }}">{{ idea.status }}</span>
+        <span class="score">{{ score_summary(idea) }}</span>
+        <span class="date">{{ idea.generated_at.strftime('%Y-%m-%d %H:%M UTC') }}</span>
+    </div>
+</div>
+
+<div class="idea-body">
+    <section>
+        <h2>Description</h2>
+        <div class="prose">{{ idea.description }}</div>
+    </section>
+
+    <section>
+        <h2>Market Analysis</h2>
+        <div class="prose">{{ idea.market_analysis }}</div>
+    </section>
+
+    <section>
+        <h2>MVP Scope</h2>
+        <div class="prose">{{ idea.mvp_scope }}</div>
+    </section>
+
+    <section>
+        <h2>Tech Stack</h2>
+        <div class="tech-stack">
+            {% for tech in idea.tech_stack %}
+            <span class="tech-badge">{{ tech }}</span>
+            {% endfor %}
+        </div>
+    </section>
+
+    {% if idea.github_issue_url %}
+    <section>
+        <h2>GitHub Issue</h2>
+        <a href="{{ idea.github_issue_url }}" target="_blank">{{ idea.github_issue_url }}</a>
+    </section>
+    {% endif %}
+
+    {% if idea.project_repo_url %}
+    <section>
+        <h2>Project Repository</h2>
+        <a href="{{ idea.project_repo_url }}" target="_blank">{{ idea.project_repo_url }}</a>
+    </section>
+    {% endif %}
+</div>
+
+<div class="idea-actions">
+    {% if idea.status == 'new' %}
+    <button class="btn btn-approve" onclick="approveIdea('{{ idea.id }}')">Approve</button>
+    <button class="btn btn-reject" onclick="rejectIdea('{{ idea.id }}')">Reject</button>
+    {% elif idea.status == 'approved' %}
+    <button class="btn btn-scaffold" onclick="scaffoldIdea('{{ idea.id }}')">Scaffold Project</button>
+    {% endif %}
+    <a href="/ideas" class="btn">Back to Ideas</a>
+</div>
+{% endblock %}

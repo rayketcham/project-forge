@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Projects - Project Forge{% endblock %}
+
+{% block content %}
+<h1>Scaffolded Projects</h1>
+
+{% if projects %}
+<div class="ideas-table">
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Category</th>
+                <th>Repository</th>
+                <th>Tech Stack</th>
+                <th>Scaffolded</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for project in projects %}
+            <tr>
+                <td><a href="/ideas/{{ project.id }}">{{ project.name }}</a></td>
+                <td><span class="badge badge-{{ project.category.value }}">{{ project.category.value }}</span></td>
+                <td>
+                    {% if project.project_repo_url %}
+                    <a href="{{ project.project_repo_url }}" target="_blank">View Repo</a>
+                    {% else %}
+                    Pending
+                    {% endif %}
+                </td>
+                <td>{{ project.tech_stack | join(', ') }}</td>
+                <td>{{ project.generated_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<p class="empty-state">No projects scaffolded yet. Approve ideas and scaffold them from the Ideas page.</p>
+{% endif %}
+{% endblock %}

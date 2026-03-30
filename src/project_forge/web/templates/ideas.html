@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Ideas - Project Forge{% endblock %}
+
+{% block content %}
+<h1>All Ideas</h1>
+
+<div class="filters">
+    <form method="get" action="/ideas">
+        <select name="status">
+            <option value="">All Statuses</option>
+            <option value="new" {% if status_filter == 'new' %}selected{% endif %}>New</option>
+            <option value="approved" {% if status_filter == 'approved' %}selected{% endif %}>Approved</option>
+            <option value="scaffolded" {% if status_filter == 'scaffolded' %}selected{% endif %}>Scaffolded</option>
+            <option value="rejected" {% if status_filter == 'rejected' %}selected{% endif %}>Rejected</option>
+            <option value="archived" {% if status_filter == 'archived' %}selected{% endif %}>Archived</option>
+        </select>
+        <select name="category">
+            <option value="">All Categories</option>
+            {% for cat in categories %}
+            <option value="{{ cat.value }}" {% if category_filter == cat.value %}selected{% endif %}>{{ cat.value }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn">Filter</button>
+    </form>
+</div>
+
+<p class="results-count">{{ total }} idea{{ 's' if total != 1 else '' }} found (page {{ page }}/{{ pages }})</p>
+
+{% if ideas %}
+<div class="ideas-table">
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Tagline</th>
+                <th>Category</th>
+                <th>Score</th>
+                <th>Status</th>
+                <th>Generated</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for idea in ideas %}
+            <tr>
+                <td><a href="/ideas/{{ idea.id }}">{{ idea.name }}</a></td>
+                <td>{{ idea.tagline }}</td>
+                <td><span class="badge badge-{{ idea.category.value }}">{{ idea.category.value }}</span></td>
+                <td>{{ score_summary(idea) }}</td>
+                <td><span class="status status-{{ idea.status }}">{{ idea.status }}</span></td>
+                <td>{{ idea.generated_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="pagination">
+    {% if page > 1 %}
+    <a href="/ideas?page={{ page - 1 }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if category_filter %}&category={{ category_filter }}{% endif %}" class="btn">Previous</a>
+    {% endif %}
+    {% if page < pages %}
+    <a href="/ideas?page={{ page + 1 }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if category_filter %}&category={{ category_filter }}{% endif %}" class="btn">Next</a>
+    {% endif %}
+</div>
+{% else %}
+<p class="empty-state">No ideas match your filters.</p>
+{% endif %}
+{% endblock %}
