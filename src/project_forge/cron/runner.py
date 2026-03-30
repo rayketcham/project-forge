@@ -2,11 +2,10 @@
 
 import asyncio
 import logging
+import os
 import sys
 
 from project_forge.config import settings
-from project_forge.cron.scheduler import run_full_cycle
-from project_forge.engine.generator import IdeaGenerator
 from project_forge.storage.db import Database
 
 logging.basicConfig(
@@ -20,9 +19,24 @@ async def _run():
     db = Database(settings.db_path)
     await db.connect()
     try:
-        generator = IdeaGenerator()
-        idea = await run_full_cycle(db, generator)
-        logger.info("Generated: %s (score: %.2f, category: %s)", idea.name, idea.feasibility_score, idea.category.value)
+        api_key = settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+
+        if api_key:
+            # Use Claude API for high-quality generation
+            from project_forge.cron.scheduler import run_full_cycle
+            from project_forge.engine.generator import IdeaGenerator
+
+            generator = IdeaGenerator(api_key=api_key)
+            idea = await run_full_cycle(db, generator)
+            logger.info("API-generated: %s (score: %.2f)", idea.name, idea.feasibility_score)
+        else:
+            # Use local generation from seed data
+            from project_forge.cron.auto_scan import run_auto_scan
+
+            ideas = await run_auto_scan(db, count=5)
+            logger.info("Auto-scan generated %d ideas locally", len(ideas))
+            for idea in ideas:
+                logger.info("  - %s (%s, %.2f)", idea.name, idea.category.value, idea.feasibility_score)
     except Exception:
         logger.exception("Generation cycle failed")
         sys.exit(1)
