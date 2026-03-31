@@ -12,9 +12,9 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Lint with ruff
-        run: python3 -m ruff check src/ tests/
+        run: python3.12 -m ruff check src/ tests/
       - name: Check formatting
-        run: python3 -m ruff format --check src/ tests/
+        run: python3.12 -m ruff format --check src/ tests/
 
   test:
     runs-on: [self-hosted, Linux]
@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Create venv and install
         run: |
-          python3 -m venv .venv
+          python3.12 -m venv .venv
           .venv/bin/pip install --upgrade pip
           .venv/bin/pip install -e ".[test]"
       - name: Run tests
@@ -36,7 +36,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Build wheel and sdist
         run: |
-          python3 -m venv .venv
+          python3.12 -m venv .venv
           .venv/bin/pip install --upgrade pip
           .venv/bin/pip install build
           .venv/bin/python -m build --outdir dist/
@@ -44,7 +44,7 @@ jobs:
         run: |
           WHEEL=$(ls dist/*.whl)
           echo "Built: $WHEEL ($(stat -c%s "$WHEEL") bytes)"
-          python3 -c "
+          python3.12 -c "
           import zipfile, sys
           with zipfile.ZipFile('$WHEEL') as zf:
               names = zf.namelist()
@@ -58,7 +58,7 @@ jobs:
           "
       - name: Test install in fresh venv
         run: |
-          python3 -m venv /tmp/forge-install-test
+          python3.12 -m venv /tmp/forge-install-test
           /tmp/forge-install-test/bin/pip install dist/*.whl
           /tmp/forge-install-test/bin/python -c "import project_forge; print('OK:', project_forge.__file__)"
           test -f /tmp/forge-install-test/bin/forge-generate || { echo "FAIL: forge-generate missing"; exit 1; }
@@ -72,7 +72,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Security lint
-        run: python3 -m ruff check src/ --select S --ignore S101,S311,S314,S603,S607,S701
+        run: python3.12 -m ruff check src/ --select S --ignore S101,S311,S314,S603,S607,S701
 
   issue-test-ratio:
     runs-on: [self-hosted, Linux]
@@ -84,7 +84,7 @@ jobs:
           GH_REPO: rayketcham-lab/project-forge
         run: |
           ISSUE_COUNT=$(gh issue list -R "$GH_REPO" --state all --label feature --json number -q 'length' 2>/dev/null || echo 0)
-          TEST_COUNT=$(python3 -m pytest tests/ --collect-only -q 2>/dev/null | tail -1 | grep -oP '\d+(?= test)' || echo 0)
+          TEST_COUNT=$(python3.12 -m pytest tests/ --collect-only -q 2>/dev/null | tail -1 | grep -oP '\d+(?= test)' || echo 0)
           echo "Feature issues: $ISSUE_COUNT, Tests: $TEST_COUNT"
           if [ "$TEST_COUNT" -lt "$ISSUE_COUNT" ]; then
             echo "::warning::Test count ($TEST_COUNT) is below feature issue count ($ISSUE_COUNT)"
