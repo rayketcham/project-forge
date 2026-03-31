@@ -26,9 +26,9 @@ async def dashboard(request: Request):
         {"name": cat, "count": cat_counts.get(cat, 0), "avg_score": cat_avgs.get(cat, 0)} for cat in cat_counts
     ]
     return templates.TemplateResponse(
+        request,
         "dashboard.html",
         {
-            "request": request,
             "stats": stats,
             "top_ideas": top_ideas[:6],
             "categories": sorted(categories, key=lambda c: c["count"], reverse=True),
@@ -55,9 +55,9 @@ async def explore(
         ideas = await db.list_ideas(status=status, category=cat, limit=limit, offset=offset)
         total = await db.count_ideas(status=status)
     return templates.TemplateResponse(
+        request,
         "explore.html",
         {
-            "request": request,
             "ideas": ideas,
             "total": total,
             "page": page,
@@ -90,8 +90,9 @@ async def idea_detail(request: Request, idea_id: str):
     related = await db.list_ideas(category=idea.category, limit=4)
     related = [r for r in related if r.id != idea.id][:3]
     return templates.TemplateResponse(
+        request,
         "idea_detail.html",
-        {"request": request, "idea": idea, "related": related, "score_summary": score_summary},
+        {"idea": idea, "related": related, "score_summary": score_summary},
     )
 
 
@@ -164,8 +165,9 @@ async def scaffold_idea(
 async def projects_list(request: Request):
     ideas = await db.list_ideas(status="scaffolded")
     return templates.TemplateResponse(
+        request,
         "projects.html",
-        {"request": request, "projects": ideas},
+        {"projects": ideas},
     )
 
 
