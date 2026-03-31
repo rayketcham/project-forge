@@ -128,8 +128,10 @@ def generate_local_idea(
         other_seeds = CATEGORY_SEEDS[other_cat]
         other_concept = random.choice(other_seeds["seed_concepts"])
         filled = template.format(
-            concept_a=concept, concept_b=other_concept,
-            domain_a=category.value, domain_b=other_cat.value,
+            concept_a=concept,
+            concept_b=other_concept,
+            domain_a=category.value,
+            domain_b=other_cat.value,
         )
         description = f"Cross-pollination: {filled}\n\n"
         description += f"Bridging {category.value} and {other_cat.value} to create something neither domain has alone."

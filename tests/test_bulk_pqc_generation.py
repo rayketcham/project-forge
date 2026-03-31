@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
-from project_forge.cron.auto_scan import generate_local_idea, run_auto_scan
+from project_forge.cron.auto_scan import run_auto_scan
 from project_forge.models import IdeaCategory
 from project_forge.storage.db import Database
 

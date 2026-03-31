@@ -33,7 +33,7 @@ async def _run():
             # Use local generation from seed data
             from project_forge.cron.auto_scan import run_auto_scan
 
-            ideas = await run_auto_scan(db, count=5)
+            ideas = await run_auto_scan(db, count=15)
             logger.info("Auto-scan generated %d ideas locally", len(ideas))
             for idea in ideas:
                 logger.info("  - %s (%s, %.2f)", idea.name, idea.category.value, idea.feasibility_score)
