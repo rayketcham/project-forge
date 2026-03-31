@@ -17,14 +17,14 @@ router = APIRouter()
 async def dashboard(request: Request):
     stats = await db.get_stats()
     top_ideas = await db.list_ideas(limit=6)
-    # Sort by score descending
     top_ideas.sort(key=lambda i: i.feasibility_score, reverse=True)
-    categories = []
-    for cat in IdeaCategory:
-        count = len(await db.list_ideas(category=cat, limit=1000))
-        ideas_in_cat = await db.list_ideas(category=cat, limit=100)
-        avg = sum(i.feasibility_score for i in ideas_in_cat) / len(ideas_in_cat) if ideas_in_cat else 0
-        categories.append({"name": cat.value, "count": count, "avg_score": round(avg, 2)})
+    # SQL-optimized category counts + avg scores (no in-memory loading)
+    cat_counts = await db.count_ideas_by_category()
+    cursor = await db.db.execute("SELECT category, AVG(feasibility_score) FROM ideas GROUP BY category")
+    cat_avgs = {row[0]: round(row[1], 2) for row in await cursor.fetchall()}
+    categories = [
+        {"name": cat, "count": cat_counts.get(cat, 0), "avg_score": cat_avgs.get(cat, 0)} for cat in cat_counts
+    ]
     return templates.TemplateResponse(
         "dashboard.html",
         {
@@ -48,17 +48,12 @@ async def explore(
     limit = 12
     offset = (page - 1) * limit
     cat = IdeaCategory(category) if category else None
-    ideas = await db.list_ideas(status=status, category=cat, limit=limit, offset=offset)
     if q:
-        q_lower = q.lower()
-        all_ideas = await db.list_ideas(limit=1000)
-        ideas = [
-            i
-            for i in all_ideas
-            if q_lower in i.name.lower() or q_lower in i.tagline.lower() or q_lower in i.description.lower()
-        ]
-        ideas = ideas[offset : offset + limit]
-    total = await db.count_ideas(status=status)
+        ideas = await db.search_ideas(q, limit=limit, offset=offset)
+        total = len(await db.search_ideas(q, limit=10000))
+    else:
+        ideas = await db.list_ideas(status=status, category=cat, limit=limit, offset=offset)
+        total = await db.count_ideas(status=status)
     return templates.TemplateResponse(
         "explore.html",
         {
@@ -158,13 +153,10 @@ async def api_top_ideas(limit: int = Query(default=10, ge=1, le=50)):
 
 @router.get("/api/categories")
 async def api_categories():
-    result = []
-    for cat in IdeaCategory:
-        ideas = await db.list_ideas(category=cat, limit=1000)
-        count = len(ideas)
-        avg = round(sum(i.feasibility_score for i in ideas) / count, 2) if count else 0
-        result.append({"name": cat.value, "count": count, "avg_score": avg})
-    return result
+    cat_counts = await db.count_ideas_by_category()
+    cursor = await db.db.execute("SELECT category, AVG(feasibility_score) FROM ideas GROUP BY category")
+    cat_avgs = {row[0]: round(row[1], 2) for row in await cursor.fetchall()}
+    return [{"name": cat, "count": cat_counts.get(cat, 0), "avg_score": cat_avgs.get(cat, 0)} for cat in IdeaCategory]
 
 
 @router.get("/api/ideas")
@@ -182,11 +174,5 @@ async def api_ideas(
 
 @router.get("/api/search")
 async def api_search(q: str = Query(min_length=1), limit: int = Query(default=20, ge=1, le=100)):
-    q_lower = q.lower()
-    all_ideas = await db.list_ideas(limit=1000)
-    matches = [
-        i
-        for i in all_ideas
-        if q_lower in i.name.lower() or q_lower in i.tagline.lower() or q_lower in i.description.lower()
-    ]
-    return {"ideas": [i.model_dump() for i in matches[:limit]], "total": len(matches)}
+    ideas = await db.search_ideas(q, limit=limit)
+    return {"ideas": [i.model_dump() for i in ideas], "total": len(ideas)}

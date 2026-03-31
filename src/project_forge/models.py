@@ -40,6 +40,7 @@ class Idea(BaseModel):
     status: IdeaStatus = "new"
     github_issue_url: str | None = None
     project_repo_url: str | None = None
+    content_hash: str | None = None
 
 
 class ScaffoldSpec(BaseModel):

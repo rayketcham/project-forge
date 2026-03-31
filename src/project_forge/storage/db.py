@@ -1,4 +1,8 @@
-"""SQLite storage for ideas, projects, and generation runs."""
+"""SQLite storage for ideas, projects, and generation runs.
+
+Hardened with WAL mode, busy_timeout, content fingerprinting,
+and input-tuple tracking for deduplication at scale.
+"""
 
 import json
 from datetime import UTC, datetime
@@ -22,8 +26,14 @@ CREATE TABLE IF NOT EXISTS ideas (
     generated_at TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'new',
     github_issue_url TEXT,
-    project_repo_url TEXT
+    project_repo_url TEXT,
+    content_hash TEXT
 );
+
+CREATE INDEX IF NOT EXISTS idx_ideas_category ON ideas(category);
+CREATE INDEX IF NOT EXISTS idx_ideas_status ON ideas(status);
+CREATE INDEX IF NOT EXISTS idx_ideas_score ON ideas(feasibility_score);
+CREATE INDEX IF NOT EXISTS idx_ideas_generated ON ideas(generated_at);
 
 CREATE TABLE IF NOT EXISTS generation_runs (
     id TEXT PRIMARY KEY,
@@ -33,6 +43,15 @@ CREATE TABLE IF NOT EXISTS generation_runs (
     completed_at TEXT,
     success INTEGER NOT NULL DEFAULT 0,
     error TEXT
+);
+
+CREATE TABLE IF NOT EXISTS used_tuples (
+    category TEXT NOT NULL,
+    concept_idx INTEGER NOT NULL,
+    domain_idx INTEGER NOT NULL,
+    direction TEXT NOT NULL,
+    used_at TEXT NOT NULL,
+    PRIMARY KEY (category, concept_idx, domain_idx, direction)
 );
 """
 
@@ -46,7 +65,20 @@ class Database:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._db = await aiosqlite.connect(self.db_path)
         self._db.row_factory = aiosqlite.Row
+        # Hardening: WAL mode + busy_timeout for concurrent safety
+        await self._db.execute("PRAGMA journal_mode = WAL")
+        await self._db.execute("PRAGMA busy_timeout = 5000")
         await self._db.executescript(SCHEMA)
+        # Migration: add content_hash column if missing (safe for existing DBs)
+        try:
+            await self._db.execute("ALTER TABLE ideas ADD COLUMN content_hash TEXT")
+        except Exception:  # noqa: S110
+            pass  # Column already exists on migrated DBs
+        # Add indexes (safe to re-run)
+        await self._db.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_ideas_content_hash "
+            "ON ideas(content_hash) WHERE content_hash IS NOT NULL"
+        )
         await self._db.commit()
 
     async def close(self):
@@ -60,13 +92,23 @@ class Database:
             raise RuntimeError("Database not connected")
         return self._db
 
+    # === IDEA CRUD ===
+
     async def save_idea(self, idea: Idea) -> Idea:
+        content_hash = getattr(idea, "content_hash", None)
+        if content_hash:
+            # Check if content_hash already exists -- skip if duplicate
+            cursor = await self.db.execute("SELECT id FROM ideas WHERE content_hash = ?", (content_hash,))
+            existing = await cursor.fetchone()
+            if existing:
+                return idea  # Silently skip duplicate content
+
         await self.db.execute(
             """INSERT OR REPLACE INTO ideas
             (id, name, tagline, description, category, market_analysis,
              feasibility_score, mvp_scope, tech_stack, generated_at, status,
-             github_issue_url, project_repo_url)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+             github_issue_url, project_repo_url, content_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 idea.id,
                 idea.name,
@@ -81,6 +123,7 @@ class Database:
                 idea.status,
                 idea.github_issue_url,
                 idea.project_repo_url,
+                content_hash,
             ),
         )
         await self.db.commit()
@@ -129,6 +172,8 @@ class Database:
         await self.db.commit()
         return await self.get_idea(idea_id)
 
+    # === COUNTING & SEARCH (SQL-optimized, no Python-side filtering) ===
+
     async def count_ideas(self, status: IdeaStatus | None = None) -> int:
         if status:
             cursor = await self.db.execute("SELECT COUNT(*) FROM ideas WHERE status = ?", (status,))
@@ -137,10 +182,75 @@ class Database:
         row = await cursor.fetchone()
         return row[0]
 
+    async def count_ideas_by_category(self) -> dict[str, int]:
+        """SQL GROUP BY for category counts -- no in-memory loading."""
+        cursor = await self.db.execute("SELECT category, COUNT(*) FROM ideas GROUP BY category")
+        rows = await cursor.fetchall()
+        return {row[0]: row[1] for row in rows}
+
+    async def search_ideas(self, query: str, limit: int = 50, offset: int = 0) -> list[Idea]:
+        """SQL LIKE search -- no Python-side filtering."""
+        like_q = f"%{query}%"
+        cursor = await self.db.execute(
+            """SELECT * FROM ideas
+            WHERE name LIKE ? OR tagline LIKE ? OR description LIKE ?
+            ORDER BY feasibility_score DESC LIMIT ? OFFSET ?""",
+            (like_q, like_q, like_q, limit, offset),
+        )
+        rows = await cursor.fetchall()
+        return [self._row_to_idea(row) for row in rows]
+
+    async def get_all_idea_names(self) -> list[str]:
+        """Return just names -- lightweight, no full object loading."""
+        cursor = await self.db.execute("SELECT name FROM ideas ORDER BY generated_at DESC")
+        rows = await cursor.fetchall()
+        return [row[0] for row in rows]
+
     async def get_recent_categories(self, limit: int = 3) -> list[str]:
         cursor = await self.db.execute("SELECT category FROM ideas ORDER BY generated_at DESC LIMIT ?", (limit,))
         rows = await cursor.fetchall()
         return [row[0] for row in rows]
+
+    # === USED TUPLES (input-space dedup) ===
+
+    async def record_used_tuple(self, category: str, concept_idx: int, domain_idx: int, direction: str) -> None:
+        """Record a (category, concept, domain, direction) tuple as used."""
+        await self.db.execute(
+            """INSERT OR IGNORE INTO used_tuples
+            (category, concept_idx, domain_idx, direction, used_at)
+            VALUES (?, ?, ?, ?, ?)""",
+            (category, concept_idx, domain_idx, direction, datetime.now(UTC).isoformat()),
+        )
+        await self.db.commit()
+
+    async def is_tuple_used(self, category: str, concept_idx: int, domain_idx: int, direction: str) -> bool:
+        """Check if a generation tuple has been used."""
+        cursor = await self.db.execute(
+            """SELECT 1 FROM used_tuples
+            WHERE category = ? AND concept_idx = ? AND domain_idx = ? AND direction = ?""",
+            (category, concept_idx, domain_idx, direction),
+        )
+        return await cursor.fetchone() is not None
+
+    async def get_unused_tuple_count(self, category: str) -> int:
+        """Count how many tuples have NOT been used for a category.
+
+        This is approximate -- based on the seed data dimensions.
+        """
+        from project_forge.engine.categories import CATEGORY_SEEDS
+
+        cat_enum = IdeaCategory(category)
+        seeds = CATEGORY_SEEDS.get(cat_enum, {})
+        n_concepts = len(seeds.get("seed_concepts", []))
+        n_domains = len(seeds.get("domains_to_cross", []))
+        total = n_concepts * n_domains * 4  # 4 directions
+
+        cursor = await self.db.execute("SELECT COUNT(*) FROM used_tuples WHERE category = ?", (category,))
+        row = await cursor.fetchone()
+        used = row[0] if row else 0
+        return max(0, total - used)
+
+    # === GENERATION RUNS ===
 
     async def save_run(self, run: GenerationRun) -> GenerationRun:
         await self.db.execute(
@@ -160,28 +270,23 @@ class Database:
         await self.db.commit()
         return run
 
+    # === STATS ===
+
     async def get_stats(self) -> dict:
         ideas_by_status = {}
         cursor = await self.db.execute("SELECT status, COUNT(*) FROM ideas GROUP BY status")
         for row in await cursor.fetchall():
             ideas_by_status[row[0]] = row[1]
 
-        ideas_by_category = {}
-        cursor = await self.db.execute("SELECT category, COUNT(*) FROM ideas GROUP BY category")
-        for row in await cursor.fetchall():
-            ideas_by_category[row[0]] = row[1]
+        ideas_by_category = await self.count_ideas_by_category()
 
-        total_runs = 0
         cursor = await self.db.execute("SELECT COUNT(*) FROM generation_runs")
         row = await cursor.fetchone()
-        if row:
-            total_runs = row[0]
+        total_runs = row[0] if row else 0
 
-        avg_score = 0.0
         cursor = await self.db.execute("SELECT AVG(feasibility_score) FROM ideas")
         row = await cursor.fetchone()
-        if row and row[0]:
-            avg_score = round(row[0], 2)
+        avg_score = round(row[0], 2) if row and row[0] else 0.0
 
         return {
             "total_ideas": sum(ideas_by_status.values()),
@@ -190,6 +295,8 @@ class Database:
             "total_runs": total_runs,
             "avg_feasibility_score": avg_score,
         }
+
+    # === HELPERS ===
 
     @staticmethod
     def _row_to_idea(row) -> Idea:
