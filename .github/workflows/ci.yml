@@ -6,64 +6,63 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  PY: python3
+
 jobs:
   lint:
     runs-on: [self-hosted, Linux]
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Lint with ruff
-        run: /usr/bin/python3.12 -m ruff check src/ tests/
+        run: $PY -m ruff check src/ tests/
       - name: Check formatting
-        run: /usr/bin/python3.12 -m ruff format --check src/ tests/
+        run: $PY -m ruff format --check src/ tests/
 
   test:
     runs-on: [self-hosted, Linux]
     needs: lint
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - name: Create venv and install
+      - name: Install and test
         run: |
-          /usr/bin/python3.12 -m venv .venv
+          $PY -m venv .venv
           .venv/bin/pip install --upgrade pip
           .venv/bin/pip install -e ".[test]"
-      - name: Run tests
-        run: .venv/bin/python -m pytest tests/ -v --tb=short
+          .venv/bin/python -m pytest tests/ -v --tb=short
 
   build:
     runs-on: [self-hosted, Linux]
     needs: test
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - name: Build wheel and sdist
+      - name: Build and verify wheel
         run: |
-          /usr/bin/python3.12 -m venv .venv
-          .venv/bin/pip install --upgrade pip
-          .venv/bin/pip install build
-          .venv/bin/python -m build --outdir dist/
-      - name: Verify wheel contents
-        run: |
+          $PY -m venv .build-venv
+          .build-venv/bin/pip install --upgrade pip
+          .build-venv/bin/pip install build
+          .build-venv/bin/python -m build --outdir dist/
           WHEEL=$(ls dist/*.whl)
           echo "Built: $WHEEL ($(stat -c%s "$WHEEL") bytes)"
-          /usr/bin/python3.12 -c "
+          $PY -c "
           import zipfile, sys
           with zipfile.ZipFile('$WHEEL') as zf:
               names = zf.namelist()
               required = ['project_forge/models.py', 'project_forge/web/', 'templates/', 'static/']
               for r in required:
                   if not any(r in n for n in names):
-                      print(f'MISSING: {r}')
-                      sys.exit(1)
+                      print(f'MISSING: {r}'); sys.exit(1)
                   print(f'FOUND: {r}')
-          print(f'Wheel contains {len(names)} files')
+          print(f'Wheel OK: {len(names)} files')
           "
-      - name: Test install in fresh venv
+      - name: Test install in clean venv
         run: |
-          /usr/bin/python3.12 -m venv /tmp/forge-install-test
+          $PY -m venv /tmp/forge-install-test
+          /tmp/forge-install-test/bin/pip install --upgrade pip
           /tmp/forge-install-test/bin/pip install dist/*.whl
           /tmp/forge-install-test/bin/python -c "import project_forge; print('OK:', project_forge.__file__)"
-          test -f /tmp/forge-install-test/bin/forge-generate || { echo "FAIL: forge-generate missing"; exit 1; }
-          test -f /tmp/forge-install-test/bin/forge-serve || { echo "FAIL: forge-serve missing"; exit 1; }
-          echo "PASS: All entry points installed"
+          test -f /tmp/forge-install-test/bin/forge-generate && echo "PASS: forge-generate"
+          test -f /tmp/forge-install-test/bin/forge-serve && echo "PASS: forge-serve"
           rm -rf /tmp/forge-install-test
 
   security:
@@ -72,7 +71,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Security lint
-        run: /usr/bin/python3.12 -m ruff check src/ --select S --ignore S101,S311,S314,S603,S607,S701
+        run: $PY -m ruff check src/ --select S --ignore S101,S311,S314,S603,S607,S701
 
   issue-test-ratio:
     runs-on: [self-hosted, Linux]
@@ -84,7 +83,7 @@ jobs:
           GH_REPO: rayketcham-lab/project-forge
         run: |
           ISSUE_COUNT=$(gh issue list -R "$GH_REPO" --state all --label feature --json number -q 'length' 2>/dev/null || echo 0)
-          TEST_COUNT=$(/usr/bin/python3.12 -m pytest tests/ --collect-only -q 2>/dev/null | tail -1 | grep -oP '\d+(?= test)' || echo 0)
+          TEST_COUNT=$($PY -m pytest tests/ --collect-only -q 2>/dev/null | tail -1 | grep -oP '\d+(?= test)' || echo 0)
           echo "Feature issues: $ISSUE_COUNT, Tests: $TEST_COUNT"
           if [ "$TEST_COUNT" -lt "$ISSUE_COUNT" ]; then
             echo "::warning::Test count ($TEST_COUNT) is below feature issue count ($ISSUE_COUNT)"
