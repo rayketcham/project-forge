@@ -10,7 +10,7 @@ from pathlib import Path
 
 import aiosqlite
 
-from project_forge.models import GenerationRun, Idea, IdeaCategory, IdeaStatus
+from project_forge.models import GenerationRun, Idea, IdeaCategory, IdeaStatus, Resource
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS ideas (
@@ -53,6 +53,17 @@ CREATE TABLE IF NOT EXISTS used_tuples (
     used_at TEXT NOT NULL,
     PRIMARY KEY (category, concept_idx, domain_idx, direction)
 );
+
+CREATE TABLE IF NOT EXISTS resources (
+    id TEXT PRIMARY KEY,
+    domain TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL,
+    url TEXT,
+    categories TEXT NOT NULL DEFAULT '[]',
+    idea_count INTEGER NOT NULL DEFAULT 0,
+    added_at TEXT NOT NULL
+);
 """
 
 
@@ -72,6 +83,11 @@ class Database:
         # Migration: add content_hash column if missing (safe for existing DBs)
         try:
             await self._db.execute("ALTER TABLE ideas ADD COLUMN content_hash TEXT")
+        except Exception:  # noqa: S110
+            pass  # Column already exists on migrated DBs
+        # Migration: add source_url column if missing
+        try:
+            await self._db.execute("ALTER TABLE ideas ADD COLUMN source_url TEXT")
         except Exception:  # noqa: S110
             pass  # Column already exists on migrated DBs
         # Add indexes (safe to re-run)
@@ -107,8 +123,8 @@ class Database:
             """INSERT OR REPLACE INTO ideas
             (id, name, tagline, description, category, market_analysis,
              feasibility_score, mvp_scope, tech_stack, generated_at, status,
-             github_issue_url, project_repo_url, content_hash)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+             github_issue_url, project_repo_url, content_hash, source_url)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 idea.id,
                 idea.name,
@@ -124,6 +140,7 @@ class Database:
                 idea.github_issue_url,
                 idea.project_repo_url,
                 content_hash,
+                idea.source_url,
             ),
         )
         await self.db.commit()
@@ -300,6 +317,7 @@ class Database:
 
     @staticmethod
     def _row_to_idea(row) -> Idea:
+        keys = row.keys() if hasattr(row, "keys") else []
         return Idea(
             id=row["id"],
             name=row["name"],
@@ -316,4 +334,67 @@ class Database:
             status=row["status"],
             github_issue_url=row["github_issue_url"],
             project_repo_url=row["project_repo_url"],
+            source_url=row["source_url"] if "source_url" in keys else None,
+        )
+
+    # === RESOURCE CRUD ===
+
+    async def save_resource(self, resource: Resource) -> Resource:
+        await self.db.execute(
+            """INSERT OR REPLACE INTO resources
+            (id, domain, name, description, url, categories, idea_count, added_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                resource.id,
+                resource.domain,
+                resource.name,
+                resource.description,
+                resource.url,
+                json.dumps(resource.categories),
+                resource.idea_count,
+                resource.added_at.isoformat(),
+            ),
+        )
+        await self.db.commit()
+        return resource
+
+    async def get_resource(self, resource_id: str) -> Resource | None:
+        cursor = await self.db.execute("SELECT * FROM resources WHERE id = ?", (resource_id,))
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        return self._row_to_resource(row)
+
+    async def get_resource_by_domain(self, domain: str) -> Resource | None:
+        cursor = await self.db.execute("SELECT * FROM resources WHERE domain = ?", (domain,))
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        return self._row_to_resource(row)
+
+    async def list_resources(self) -> list[Resource]:
+        cursor = await self.db.execute("SELECT * FROM resources ORDER BY added_at DESC")
+        rows = await cursor.fetchall()
+        return [self._row_to_resource(row) for row in rows]
+
+    async def increment_resource_idea_count(self, domain: str) -> None:
+        await self.db.execute(
+            "UPDATE resources SET idea_count = idea_count + 1 WHERE domain = ?",
+            (domain,),
+        )
+        await self.db.commit()
+
+    @staticmethod
+    def _row_to_resource(row) -> Resource:
+        return Resource(
+            id=row["id"],
+            domain=row["domain"],
+            name=row["name"],
+            description=row["description"],
+            url=row["url"],
+            categories=json.loads(row["categories"]),
+            idea_count=row["idea_count"],
+            added_at=datetime.fromisoformat(row["added_at"]).replace(tzinfo=UTC)
+            if "+" not in row["added_at"]
+            else datetime.fromisoformat(row["added_at"]),
         )

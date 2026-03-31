@@ -66,6 +66,38 @@ from project_forge.web.routes import router  # noqa: E402
 app.include_router(router)
 
 
+def create_app(db_path=None):
+    """Create a test-friendly app instance with an isolated database."""
+    from project_forge.storage.db import Database as DB
+
+    test_db = DB(db_path or settings.db_path)
+
+    @asynccontextmanager
+    async def test_lifespan(application: FastAPI):
+        await test_db.connect()
+        # Swap the module-level db reference so routes use the test DB
+        import project_forge.web.app as app_mod
+
+        old_db = app_mod.db
+        app_mod.db = test_db
+        # Also patch into routes module (imported from app)
+        import project_forge.web.routes as routes_mod
+
+        old_routes_db = routes_mod.db
+        routes_mod.db = test_db
+        yield
+        await test_db.close()
+        app_mod.db = old_db
+        routes_mod.db = old_routes_db
+
+    test_app = FastAPI(lifespan=test_lifespan)
+    test_app.add_middleware(CSPMiddleware)
+    from project_forge.web.routes import router as r
+
+    test_app.include_router(r)
+    return test_app
+
+
 def run():
     """Entry point for forge-serve command."""
     import uvicorn

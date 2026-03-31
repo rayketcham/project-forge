@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 
 from project_forge.engine.scorer import score_summary
-from project_forge.models import IdeaCategory, IdeaStatus
+from project_forge.models import IdeaCategory, IdeaStatus, Resource, UrlIngestRequest
 from project_forge.web.app import db, templates
 
 router = APIRouter()
@@ -216,3 +216,37 @@ async def api_ideas(
 async def api_search(q: str = Query(min_length=1), limit: int = Query(default=20, ge=1, le=100)):
     ideas = await db.search_ideas(q, limit=limit)
     return {"ideas": [i.model_dump() for i in ideas], "total": len(ideas)}
+
+
+# === URL INGESTION & RESOURCE ROUTES ===
+
+
+async def ingest_idea_from_url(request_body: UrlIngestRequest):
+    """Fetch URL, extract content, and generate an idea. Module-level for patching in tests."""
+    from project_forge.engine.url_ingest import fetch_url_content, generate_idea_from_url
+
+    content = await fetch_url_content(request_body.url)
+    idea = await generate_idea_from_url(content, category_hint=request_body.category)
+    return idea
+
+
+@router.post("/api/ideas/from-url")
+async def ingest_url(request_body: UrlIngestRequest):
+    """Generate a project idea from a URL."""
+    idea = await ingest_idea_from_url(request_body)
+    await db.save_idea(idea)
+    return idea.model_dump()
+
+
+@router.get("/api/resources")
+async def list_resources():
+    """List all tracked source resources."""
+    resources = await db.list_resources()
+    return {"resources": [r.model_dump() for r in resources]}
+
+
+@router.post("/api/resources")
+async def add_resource(resource: Resource):
+    """Add or update a source resource."""
+    saved = await db.save_resource(resource)
+    return saved.model_dump()

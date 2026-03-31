@@ -3,9 +3,10 @@
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Literal
+from urllib.parse import urlparse
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class IdeaCategory(StrEnum):
@@ -41,6 +42,32 @@ class Idea(BaseModel):
     github_issue_url: str | None = None
     project_repo_url: str | None = None
     content_hash: str | None = None
+    source_url: str | None = None
+
+
+class Resource(BaseModel):
+    id: str = Field(default_factory=lambda: uuid4().hex[:12])
+    domain: str
+    name: str
+    description: str
+    url: str | None = None
+    categories: list[str] = Field(default_factory=list)
+    idea_count: int = 0
+    added_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class UrlIngestRequest(BaseModel):
+    url: str
+    category: str | None = None
+    notes: str | None = None
+
+    @field_validator("url")
+    @classmethod
+    def validate_url_format(cls, v: str) -> str:
+        parsed = urlparse(v)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            raise ValueError(f"Invalid URL: {v!r} — must be http(s)")
+        return v
 
 
 class ScaffoldSpec(BaseModel):
