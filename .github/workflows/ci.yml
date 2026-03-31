@@ -32,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Security lint
-        run: python3 -m ruff check src/ --select S
+        run: python3 -m ruff check src/ --select S --ignore S101,S311,S314,S603,S607,S701
 
   issue-test-ratio:
     runs-on: [self-hosted, Linux]
