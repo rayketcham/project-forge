@@ -212,6 +212,43 @@ async def api_ideas(
     return {"ideas": [i.model_dump() for i in ideas], "total": total}
 
 
+@router.get("/api/repos")
+async def api_repos(org: str | None = None):
+    """List org repos for the compare dropdown."""
+    from project_forge.scaffold.github import list_org_repos
+
+    try:
+        repos = list_org_repos(org)
+        return {"repos": repos}
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@router.post("/api/ideas/{idea_id}/compare")
+async def compare_idea(
+    idea_id: str,
+    owner: str = Query(default=None),
+    repo: str = Query(...),
+):
+    """Compare an idea against an existing GitHub repo."""
+    from project_forge.engine.compare import compare_idea_to_repo
+    from project_forge.scaffold.github import get_repo_details
+
+    idea = await db.get_idea(idea_id)
+    if not idea:
+        raise HTTPException(status_code=404, detail="Idea not found")
+
+    owner = owner or "rayketcham-lab"
+    try:
+        repo_details = get_repo_details(owner, repo)
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch repo: {e}") from e
+
+    result = compare_idea_to_repo(idea, repo_details)
+    result["repo_name"] = repo
+    return result
+
+
 @router.get("/api/search")
 async def api_search(q: str = Query(min_length=1), limit: int = Query(default=20, ge=1, le=100)):
     ideas = await db.search_ideas(q, limit=limit)

@@ -107,6 +107,26 @@
     </div>
 </section>
 
+<section class="section">
+    <div class="container">
+        <div class="pitch-card" id="compare-section">
+            <h2>Compare to Existing Project</h2>
+            <p class="prose">Check if this idea overlaps with an existing GitHub repo or brings something new.</p>
+            <div class="compare-form" style="display: flex; gap: 0.75rem; align-items: center; margin-top: 1rem; flex-wrap: wrap;">
+                <select id="compare-repo" class="scaffold-select" style="min-width: 220px;">
+                    <option value="">Loading repos...</option>
+                </select>
+                <button class="btn btn-primary" id="compare-btn" onclick="compareIdea('{{ idea.id }}')" disabled>
+                    Compare
+                </button>
+            </div>
+            <div id="compare-results" style="display: none; margin-top: 1.5rem;">
+                <div class="compare-verdict" id="compare-verdict"></div>
+            </div>
+        </div>
+    </div>
+</section>
+
 {% if related %}
 <section class="section section-alt">
     <div class="container">

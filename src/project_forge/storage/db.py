@@ -305,19 +305,26 @@ class Database:
         row = await cursor.fetchone()
         avg_score = round(row[0], 2) if row and row[0] else 0.0
 
+        cursor = await self.db.execute(
+            "SELECT COUNT(*) FROM ideas WHERE name LIKE '[SUPER]%'"
+        )
+        row = await cursor.fetchone()
+        super_count = row[0] if row else 0
+
         return {
             "total_ideas": sum(ideas_by_status.values()),
             "ideas_by_status": ideas_by_status,
             "ideas_by_category": ideas_by_category,
             "total_runs": total_runs,
             "avg_feasibility_score": avg_score,
+            "super_ideas": super_count,
         }
 
     # === HELPERS ===
 
     @staticmethod
     def _row_to_idea(row) -> Idea:
-        keys = row.keys() if hasattr(row, "keys") else []
+        keys = list(row.keys()) if hasattr(row, "keys") else []
         return Idea(
             id=row["id"],
             name=row["name"],

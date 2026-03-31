@@ -1,5 +1,6 @@
 """GitHub integration via gh CLI -- supports personal and org repos."""
 
+import json
 import logging
 import subprocess
 
@@ -58,6 +59,46 @@ def create_label(repo: str, name: str, color: str, description: str = "") -> Non
         _run_gh(args)
     except RuntimeError:
         logger.warning("Label %s may already exist on %s", name, repo)
+
+
+def list_org_repos(org: str | None = None) -> list[dict]:
+    """List repos in a GitHub org. Returns list of {name, description, visibility}."""
+    org = org or settings.github_org
+    output = _run_gh(["repo", "list", org, "--limit", "100", "--no-archived"])
+    if not output.strip():
+        return []
+    repos = []
+    for line in output.strip().split("\n"):
+        parts = line.split("\t")
+        if len(parts) >= 3:
+            repos.append({
+                "name": parts[0],
+                "description": parts[1],
+                "visibility": parts[2],
+            })
+    return repos
+
+
+def get_repo_details(owner: str, repo: str) -> dict:
+    """Fetch repo metadata and README content."""
+    api_output = _run_gh(["api", f"repos/{owner}/{repo}"])
+    raw = json.loads(api_output)
+    details = {
+        "name": raw.get("name", ""),
+        "description": raw.get("description", ""),
+        "topics": raw.get("topics", []),
+        "language": raw.get("language"),
+    }
+
+    # Fetch README (non-fatal)
+    try:
+        readme = _run_gh(["api", f"repos/{owner}/{repo}/readme",
+                           "--jq", ".content"])
+        details["readme"] = readme
+    except RuntimeError:
+        details["readme"] = ""
+
+    return details
 
 
 def push_initial_commit(project_dir: str, remote_url: str) -> None:

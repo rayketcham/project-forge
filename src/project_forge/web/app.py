@@ -80,7 +80,6 @@ def create_app(db_path=None):
 
         old_db = app_mod.db
         app_mod.db = test_db
-        # Also patch into routes module (imported from app)
         import project_forge.web.routes as routes_mod
 
         old_routes_db = routes_mod.db

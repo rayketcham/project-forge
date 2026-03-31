@@ -283,7 +283,7 @@ class SuperIdeaGenerator:
             feasibility_score=si.combined_feasibility,
             mvp_scope="\n".join(si.mvp_phases),
             tech_stack=si.tech_stack,
-            status="approved",
+            status="new",
         )
         await self.db.save_idea(idea)
 

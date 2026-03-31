@@ -48,6 +48,118 @@ async function scaffoldIdea(id) {
     }
 }
 
+// === Compare to GitHub Project ===
+
+async function loadRepos() {
+    const select = document.getElementById('compare-repo');
+    if (!select) return;
+    try {
+        const resp = await fetch('/api/repos');
+        if (!resp.ok) throw new Error('Failed to load repos');
+        const data = await resp.json();
+        // Clear and rebuild select options safely
+        while (select.firstChild) select.removeChild(select.firstChild);
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = '-- Select a repo --';
+        select.appendChild(placeholder);
+        for (const repo of data.repos) {
+            const opt = document.createElement('option');
+            opt.value = repo.name;
+            opt.textContent = repo.name + (repo.description ? ' - ' + repo.description : '');
+            select.appendChild(opt);
+        }
+        select.addEventListener('change', function() {
+            var btn = document.getElementById('compare-btn');
+            if (btn) btn.disabled = !select.value;
+        });
+    } catch (err) {
+        while (select.firstChild) select.removeChild(select.firstChild);
+        var errOpt = document.createElement('option');
+        errOpt.value = '';
+        errOpt.textContent = 'Failed to load repos';
+        select.appendChild(errOpt);
+    }
+}
+
+async function compareIdea(id) {
+    var select = document.getElementById('compare-repo');
+    var btn = document.getElementById('compare-btn');
+    var resultsDiv = document.getElementById('compare-results');
+    var verdictDiv = document.getElementById('compare-verdict');
+
+    if (!select || !select.value) return;
+
+    btn.disabled = true;
+    btn.textContent = 'Comparing...';
+
+    try {
+        var url = '/api/ideas/' + id + '/compare?repo=' + encodeURIComponent(select.value);
+        var resp = await fetch(url, { method: 'POST' });
+        if (!resp.ok) {
+            var err = await resp.json();
+            throw new Error(err.detail || 'Compare failed');
+        }
+        var data = await resp.json();
+
+        var scorePercent = Math.round(data.overlap_score * 100);
+        var verdictColors = { duplicate: '#e74c3c', enhance: '#f39c12', new: '#27ae60' };
+        var verdictLabels = { duplicate: 'Likely Duplicate', enhance: 'Could Enhance', new: 'New Idea' };
+        var color = verdictColors[data.verdict] || '#666';
+        var label = verdictLabels[data.verdict] || data.verdict;
+
+        // Build result display using safe DOM methods
+        while (verdictDiv.firstChild) verdictDiv.removeChild(verdictDiv.firstChild);
+
+        var headerRow = document.createElement('div');
+        headerRow.style.cssText = 'display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem';
+
+        var scoreSpan = document.createElement('span');
+        scoreSpan.style.cssText = 'font-size:2rem;font-weight:700;color:' + color;
+        scoreSpan.textContent = scorePercent + '%';
+        headerRow.appendChild(scoreSpan);
+
+        var labelSpan = document.createElement('span');
+        labelSpan.style.cssText = 'font-size:1.2rem;padding:0.25rem 0.75rem;border-radius:4px;color:#fff;font-weight:600;background:' + color;
+        labelSpan.textContent = label;
+        headerRow.appendChild(labelSpan);
+
+        verdictDiv.appendChild(headerRow);
+
+        var reasonP = document.createElement('p');
+        reasonP.style.margin = '0.5rem 0';
+        reasonP.textContent = data.reason;
+        verdictDiv.appendChild(reasonP);
+
+        if (data.matching_keywords && data.matching_keywords.length > 0) {
+            var kwP = document.createElement('p');
+            kwP.style.marginTop = '0.5rem';
+            var strong = document.createElement('strong');
+            strong.textContent = 'Matching keywords: ';
+            kwP.appendChild(strong);
+            kwP.appendChild(document.createTextNode(data.matching_keywords.join(', ')));
+            verdictDiv.appendChild(kwP);
+        }
+
+        resultsDiv.style.display = 'block';
+    } catch (err) {
+        while (verdictDiv.firstChild) verdictDiv.removeChild(verdictDiv.firstChild);
+        var errP = document.createElement('p');
+        errP.style.color = '#e74c3c';
+        errP.textContent = 'Error: ' + err.message;
+        verdictDiv.appendChild(errP);
+        resultsDiv.style.display = 'block';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Compare';
+    }
+}
+
+// Load repos dropdown on idea detail pages
+if (document.getElementById('compare-repo')) {
+    loadRepos();
+}
+
 // Auto-refresh stats on dashboard
 if (window.location.pathname === '/') {
     setInterval(async () => {
