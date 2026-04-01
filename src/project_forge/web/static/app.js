@@ -1,3 +1,20 @@
+// === Tab Switching ===
+
+function switchTab(tabName) {
+    // Deactivate all tabs and panels
+    document.querySelectorAll('.tab-btn').forEach(function(btn) {
+        btn.classList.remove('active');
+    });
+    document.querySelectorAll('.tab-panel').forEach(function(panel) {
+        panel.classList.remove('active');
+    });
+    // Activate selected tab and panel
+    var btn = document.querySelector('[data-tab="' + tabName + '"]');
+    var panel = document.getElementById('tab-' + tabName);
+    if (btn) btn.classList.add('active');
+    if (panel) panel.classList.add('active');
+}
+
 async function apiAction(url, method = 'POST') {
     try {
         const response = await fetch(url, { method });

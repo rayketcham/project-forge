@@ -42,53 +42,91 @@
 
 <section class="section">
     <div class="container">
-        <div class="section-header">
-            <h2>Top Ideas by Feasibility</h2>
-            <a href="/explore" class="btn btn-sm">View All &rarr;</a>
+        <div class="tab-bar">
+            <button class="tab-btn active" data-tab="ideas" onclick="switchTab('ideas')">Ideas</button>
+            <button class="tab-btn" data-tab="super-ideas" onclick="switchTab('super-ideas')">Super Ideas</button>
+            <button class="tab-btn" data-tab="add-idea" onclick="switchTab('add-idea')">Add Idea</button>
         </div>
-        <div class="card-grid">
-            {% for idea in top_ideas %}
-            <a href="/ideas/{{ idea.id }}" class="idea-card">
-                <div class="card-badge">
-                    <span class="badge badge-{{ idea.category.value }}">{{ idea.category.value }}</span>
-                    <span class="score-pill">{{ "%.0f" | format(idea.feasibility_score * 100) }}%</span>
-                </div>
-                <h3 class="card-title">{{ idea.name }}</h3>
-                <p class="card-tagline">{{ idea.tagline }}</p>
-                <div class="card-meta">
-                    <div class="score-bar">
-                        <div class="score-fill" style="width: {{ idea.feasibility_score * 100 }}%"></div>
-                    </div>
-                    <div class="card-tech">
-                        {% for tech in idea.tech_stack[:3] %}
-                        <span class="tech-chip">{{ tech }}</span>
-                        {% endfor %}
-                    </div>
-                </div>
-            </a>
-            {% endfor %}
-        </div>
-    </div>
-</section>
 
-<section class="section">
-    <div class="container">
-        <div class="section-header">
-            <h2>Add Idea from URL</h2>
-        </div>
-        <div class="url-ingest-form">
-            <p class="url-ingest-desc">Paste a URL to an article, RFC, newsletter, or tech blog and generate a project idea from it.</p>
-            <div class="url-ingest-row">
-                <input type="url" id="url-input" placeholder="https://example.com/article-about-new-tech" class="search-input url-input-field" required>
-                <select id="url-category" class="url-category-select">
-                    <option value="">Auto-detect category</option>
-                    {% for cat_name in categories %}
-                    <option value="{{ cat_name.name }}">{{ cat_name.name }}</option>
-                    {% endfor %}
-                </select>
-                <button id="url-submit-btn" class="btn btn-primary" onclick="submitUrl()">Generate Idea</button>
+        <div id="tab-ideas" class="tab-panel active">
+            <div class="section-header">
+                <h2>Top Ideas by Feasibility</h2>
+                <a href="/explore" class="btn btn-sm">View All &rarr;</a>
             </div>
-            <div id="url-result" class="url-result" style="display:none"></div>
+            <div class="card-grid">
+                {% for idea in top_ideas %}
+                <a href="/ideas/{{ idea.id }}" class="idea-card">
+                    <div class="card-badge">
+                        <span class="badge badge-{{ idea.category.value }}">{{ idea.category.value }}</span>
+                        <span class="score-pill">{{ "%.0f" | format(idea.feasibility_score * 100) }}%</span>
+                    </div>
+                    <h3 class="card-title">{{ idea.name }}</h3>
+                    <p class="card-tagline">{{ idea.tagline }}</p>
+                    <div class="card-meta">
+                        <div class="score-bar">
+                            <div class="score-fill" style="width: {{ idea.feasibility_score * 100 }}%"></div>
+                        </div>
+                        <div class="card-tech">
+                            {% for tech in idea.tech_stack[:3] %}
+                            <span class="tech-chip">{{ tech }}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div id="tab-super-ideas" class="tab-panel">
+            <div class="section-header">
+                <h2>Super Ideas &mdash; Mega-Projects</h2>
+                <a href="/explore" class="btn btn-sm">View All &rarr;</a>
+            </div>
+            <div class="card-grid">
+                {% for idea in super_ideas %}
+                <a href="/ideas/{{ idea.id }}" class="idea-card">
+                    <div class="card-badge">
+                        <span class="badge badge-{{ idea.category.value }}">{{ idea.category.value }}</span>
+                        <span class="score-pill">{{ "%.0f" | format(idea.feasibility_score * 100) }}%</span>
+                    </div>
+                    <h3 class="card-title">{{ idea.name }}</h3>
+                    <p class="card-tagline">{{ idea.tagline }}</p>
+                    <div class="card-meta">
+                        <div class="score-bar">
+                            <div class="score-fill" style="width: {{ idea.feasibility_score * 100 }}%"></div>
+                        </div>
+                        <div class="card-tech">
+                            {% for tech in idea.tech_stack[:3] %}
+                            <span class="tech-chip">{{ tech }}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </a>
+                {% endfor %}
+                {% if not super_ideas %}
+                <p class="empty-state">No super ideas yet. They are synthesized hourly from clusters of related ideas.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div id="tab-add-idea" class="tab-panel">
+            <div class="section-header">
+                <h2>Add Idea from URL</h2>
+            </div>
+            <div class="url-ingest-form">
+                <p class="url-ingest-desc">Paste a URL to an article, RFC, newsletter, or tech blog and generate a project idea from it.</p>
+                <div class="url-ingest-row">
+                    <input type="url" id="url-input" placeholder="https://example.com/article-about-new-tech" class="search-input url-input-field" required>
+                    <select id="url-category" class="url-category-select">
+                        <option value="">Auto-detect category</option>
+                        {% for cat_name in categories %}
+                        <option value="{{ cat_name.name }}">{{ cat_name.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button id="url-submit-btn" class="btn btn-primary" onclick="submitUrl()">Generate Idea</button>
+                </div>
+                <div id="url-result" class="url-result" style="display:none"></div>
+            </div>
         </div>
     </div>
 </section>

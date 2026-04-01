@@ -16,8 +16,11 @@ router = APIRouter()
 @router.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
     stats = await db.get_stats()
-    top_ideas = await db.list_ideas(limit=6)
-    top_ideas.sort(key=lambda i: i.feasibility_score, reverse=True)
+    all_top = await db.list_ideas(limit=20)
+    all_top.sort(key=lambda i: i.feasibility_score, reverse=True)
+    # Split into regular ideas and super ideas
+    top_ideas = [i for i in all_top if not i.name.startswith("[SUPER]")][:6]
+    super_ideas = [i for i in all_top if i.name.startswith("[SUPER]")][:6]
     # SQL-optimized category counts + avg scores (no in-memory loading)
     cat_counts = await db.count_ideas_by_category()
     cursor = await db.db.execute("SELECT category, AVG(feasibility_score) FROM ideas GROUP BY category")
@@ -30,7 +33,8 @@ async def dashboard(request: Request):
         "dashboard.html",
         {
             "stats": stats,
-            "top_ideas": top_ideas[:6],
+            "top_ideas": top_ideas,
+            "super_ideas": super_ideas,
             "categories": sorted(categories, key=lambda c: c["count"], reverse=True),
             "score_summary": score_summary,
         },
