@@ -305,6 +305,17 @@ class Database:
         result.sort(key=lambda x: x[2])
         return result[:limit]
 
+    # === SUPER IDEAS ===
+
+    async def list_super_ideas(self, limit: int = 6) -> list[Idea]:
+        """List super ideas (name starts with [SUPER]) by score descending."""
+        cursor = await self.db.execute(
+            "SELECT * FROM ideas WHERE name LIKE '[SUPER]%' ORDER BY feasibility_score DESC LIMIT ?",
+            (limit,),
+        )
+        rows = await cursor.fetchall()
+        return [self._row_to_idea(row) for row in rows]
+
     # === GENERATION RUNS ===
 
     async def save_run(self, run: GenerationRun) -> GenerationRun:

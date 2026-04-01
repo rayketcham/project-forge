@@ -18,9 +18,9 @@ async def dashboard(request: Request):
     stats = await db.get_stats()
     all_top = await db.list_ideas(limit=20)
     all_top.sort(key=lambda i: i.feasibility_score, reverse=True)
-    # Split into regular ideas and super ideas
     top_ideas = [i for i in all_top if not i.name.startswith("[SUPER]")][:6]
-    super_ideas = [i for i in all_top if i.name.startswith("[SUPER]")][:6]
+    # Dedicated query for super ideas — ensures they show even if older than top 20
+    super_ideas = await db.list_super_ideas(limit=6)
     # SQL-optimized category counts + avg scores (no in-memory loading)
     cat_counts = await db.count_ideas_by_category()
     cursor = await db.db.execute("SELECT category, AVG(feasibility_score) FROM ideas GROUP BY category")
