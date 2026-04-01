@@ -91,6 +91,7 @@ class TestStatsDisplay:
         number_line = [line for line in lines if "stat-number" in line][-1]
         # Extract the number
         import re
+
         match = re.search(r">(\d+)<", number_line)
         assert match, f"Super Ideas stat should be an integer, got: {number_line}"
         count = int(match.group(1))

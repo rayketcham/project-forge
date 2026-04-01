@@ -106,9 +106,7 @@ class TestPickCrossCategoryPair:
 class TestGenerateCrossIdea:
     @pytest.mark.asyncio
     async def test_generates_valid_idea(self, db):
-        idea = await generate_cross_idea(
-            db, IdeaCategory.PQC_CRYPTOGRAPHY, IdeaCategory.COMPLIANCE
-        )
+        idea = await generate_cross_idea(db, IdeaCategory.PQC_CRYPTOGRAPHY, IdeaCategory.COMPLIANCE)
         assert isinstance(idea, Idea)
         assert idea.name
         assert idea.description
@@ -116,9 +114,7 @@ class TestGenerateCrossIdea:
 
     @pytest.mark.asyncio
     async def test_cross_idea_has_crossover_content(self, db):
-        idea = await generate_cross_idea(
-            db, IdeaCategory.SECURITY_TOOL, IdeaCategory.PRIVACY
-        )
+        idea = await generate_cross_idea(db, IdeaCategory.SECURITY_TOOL, IdeaCategory.PRIVACY)
         # The description should reference cross-domain concepts
         assert "cross" in idea.description.lower() or "meets" in idea.description.lower()
 

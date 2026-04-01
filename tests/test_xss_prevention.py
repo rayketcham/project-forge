@@ -52,9 +52,7 @@ async def test_idea_detail_no_raw_br_tags(client):
 
     resp = await client.get(f"/ideas/{idea.id}")
     assert resp.status_code == 200
-    assert "<br>" not in resp.text, (
-        "Response contains raw <br> tags — Jinja replace filter must be removed"
-    )
+    assert "<br>" not in resp.text, "Response contains raw <br> tags — Jinja replace filter must be removed"
 
 
 @pytest.mark.asyncio
@@ -65,12 +63,8 @@ async def test_idea_detail_escapes_script_tags(client):
 
     resp = await client.get(f"/ideas/{idea.id}")
     assert resp.status_code == 200
-    assert "<script>" not in resp.text, (
-        "Unescaped <script> tag found — content is not being auto-escaped"
-    )
-    assert "&lt;script&gt;" in resp.text, (
-        "Expected HTML-escaped &lt;script&gt; was not found in response"
-    )
+    assert "<script>" not in resp.text, "Unescaped <script> tag found — content is not being auto-escaped"
+    assert "&lt;script&gt;" in resp.text, "Expected HTML-escaped &lt;script&gt; was not found in response"
 
 
 def test_idea_detail_uses_css_whitespace():
@@ -80,22 +74,14 @@ def test_idea_detail_uses_css_whitespace():
     the CSS source directly.  This is the authoritative gate that the CSS
     approach is actually wired up.
     """
-    css_path = (
-        Path(__file__).parent.parent
-        / "src"
-        / "project_forge"
-        / "web"
-        / "static"
-        / "style.css"
-    )
+    css_path = Path(__file__).parent.parent / "src" / "project_forge" / "web" / "static" / "style.css"
     assert css_path.is_file(), f"style.css not found: {css_path}"
     css_content = css_path.read_text()
 
     # The .prose rule must carry white-space: pre-line so newlines render
     # visually without any HTML injection.
     assert "pre-line" in css_content, (
-        ".prose rule in style.css is missing 'white-space: pre-line' — "
-        "newlines will not render without HTML injection"
+        ".prose rule in style.css is missing 'white-space: pre-line' — newlines will not render without HTML injection"
     )
 
 
@@ -105,13 +91,7 @@ def test_no_replace_br_in_templates():
     This is a static analysis gate: if the pattern is re-introduced, this test
     fails immediately without needing a running server.
     """
-    templates_dir = (
-        Path(__file__).parent.parent
-        / "src"
-        / "project_forge"
-        / "web"
-        / "templates"
-    )
+    templates_dir = Path(__file__).parent.parent / "src" / "project_forge" / "web" / "templates"
     assert templates_dir.is_dir(), f"Templates directory not found: {templates_dir}"
 
     bad_pattern_single = "replace('\\n', '<br>')"
@@ -123,7 +103,6 @@ def test_no_replace_br_in_templates():
         if bad_pattern_single in content or bad_pattern_double in content:
             violations.append(str(html_file))
 
-    assert violations == [], (
-        "The replace-newline-to-br XSS trap was found in templates:\n"
-        + "\n".join(f"  {v}" for v in violations)
+    assert violations == [], "The replace-newline-to-br XSS trap was found in templates:\n" + "\n".join(
+        f"  {v}" for v in violations
     )

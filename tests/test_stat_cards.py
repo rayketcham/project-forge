@@ -62,7 +62,7 @@ class TestStatCardLinks:
         # Find scaffolded stat card that links to projects
         scaffolded_idx = text.find("Scaffolded")
         # There should be a link to /projects near the "Scaffolded" label
-        nearby = text[max(0, scaffolded_idx - 300):scaffolded_idx + 50]
+        nearby = text[max(0, scaffolded_idx - 300) : scaffolded_idx + 50]
         assert "/projects" in nearby
 
     @pytest.mark.asyncio
@@ -73,7 +73,7 @@ class TestStatCardLinks:
         super_idx = text.find("Super Ideas")
         assert super_idx > 0
         # The super ideas stat card should have a clickable link
-        nearby = text[max(0, super_idx - 300):super_idx + 50]
+        nearby = text[max(0, super_idx - 300) : super_idx + 50]
         assert "href=" in nearby
 
 

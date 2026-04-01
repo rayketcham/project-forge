@@ -29,18 +29,38 @@ async def seeded_client(tmp_path):
     for i in range(3):
         await db.db.execute(
             sql,
-            (f"super-{i}", f"[SUPER] Mega Project {i}", f"Super tagline {i}",
-             f"Super description {i}", "security-tool", "N/A", 0.9, "N/A",
-             "[]", "2025-01-01T00:00:00", "new"),
+            (
+                f"super-{i}",
+                f"[SUPER] Mega Project {i}",
+                f"Super tagline {i}",
+                f"Super description {i}",
+                "security-tool",
+                "N/A",
+                0.9,
+                "N/A",
+                "[]",
+                "2025-01-01T00:00:00",
+                "new",
+            ),
         )
 
     # Insert 25 regular ideas with RECENT timestamps (push supers out of top 20)
     for i in range(25):
         await db.db.execute(
             sql,
-            (f"regular-{i}", f"Regular Idea {i}", f"Tagline {i}",
-             f"Description {i}", "security-tool", "N/A", 0.5, "N/A",
-             "[]", "2026-04-01T00:00:00", "new"),
+            (
+                f"regular-{i}",
+                f"Regular Idea {i}",
+                f"Tagline {i}",
+                f"Description {i}",
+                "security-tool",
+                "N/A",
+                0.5,
+                "N/A",
+                "[]",
+                "2026-04-01T00:00:00",
+                "new",
+            ),
         )
     await db.db.commit()
 
@@ -75,9 +95,7 @@ class TestSuperIdeasDashboardBug:
     async def test_dashboard_db_has_dedicated_super_query(self, seeded_client):
         """The DB layer should have a method to list super ideas directly."""
         # This tests that we added a proper query instead of filtering in Python
-        assert hasattr(db, "list_super_ideas"), (
-            "Database should have list_super_ideas() method"
-        )
+        assert hasattr(db, "list_super_ideas"), "Database should have list_super_ideas() method"
         supers = await db.list_super_ideas(limit=6)
         assert len(supers) == 3
         assert all(s.name.startswith("[SUPER]") for s in supers)

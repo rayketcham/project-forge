@@ -165,6 +165,4 @@ class TestSuperIdeaGeneratorEmptyPool:
         """generate() must return [] when there are fewer than 10 ideas."""
         gen = SuperIdeaGenerator(sparse_db)
         result = await gen.generate(count=5)
-        assert result == [], (
-            f"Expected empty list with only 5 ideas in pool, got {result}"
-        )
+        assert result == [], f"Expected empty list with only 5 ideas in pool, got {result}"

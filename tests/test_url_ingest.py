@@ -5,6 +5,7 @@ Feature: Generate project ideas from URLs + track source domains as resources.
 """
 
 import json
+import socket
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -576,16 +577,18 @@ class TestUrlUtilities:
 # === Generator.generate_from_content tests ===
 
 
-MOCK_IDEA_JSON = json.dumps({
-    "name": "Merkle Certificate Verifier",
-    "tagline": "Validate Merkle Tree certificates against transparency logs",
-    "description": "A tool to verify and audit Merkle Tree-based certificates.",
-    "category": "pqc-cryptography",
-    "market_analysis": "Web PKI is evolving toward certificate transparency.",
-    "feasibility_score": 0.82,
-    "mvp_scope": "CLI tool that validates certificates against Merkle proofs.",
-    "tech_stack": ["python", "cryptography", "httpx"],
-})
+MOCK_IDEA_JSON = json.dumps(
+    {
+        "name": "Merkle Certificate Verifier",
+        "tagline": "Validate Merkle Tree certificates against transparency logs",
+        "description": "A tool to verify and audit Merkle Tree-based certificates.",
+        "category": "pqc-cryptography",
+        "market_analysis": "Web PKI is evolving toward certificate transparency.",
+        "feasibility_score": 0.82,
+        "mvp_scope": "CLI tool that validates certificates against Merkle proofs.",
+        "tech_stack": ["python", "cryptography", "httpx"],
+    }
+)
 
 
 class TestGenerateFromContent:
@@ -642,3 +645,59 @@ class TestGenerateFromContent:
         call_args = gen.client.messages.create.call_args
         prompt_text = call_args.kwargs["messages"][0]["content"]
         assert "security-tool" in prompt_text
+
+
+# === SSRF PROTECTION TESTS ===
+
+
+class TestSSRFProtection:
+    """validate_url() must block private/loopback/link-local IPs to prevent SSRF."""
+
+    def test_rejects_localhost(self):
+        """Direct loopback IP must raise ValueError."""
+        from project_forge.engine.url_ingest import validate_url
+
+        with pytest.raises(ValueError, match="private"):
+            validate_url("http://127.0.0.1/foo")
+
+    def test_rejects_private_ip(self):
+        """RFC-1918 192.168.x.x range must raise ValueError."""
+        from project_forge.engine.url_ingest import validate_url
+
+        with pytest.raises(ValueError, match="private"):
+            validate_url("http://192.168.1.1/")
+
+    def test_rejects_link_local(self):
+        """Link-local (169.254.x.x) used by cloud metadata services must raise ValueError."""
+        from project_forge.engine.url_ingest import validate_url
+
+        with pytest.raises(ValueError, match="private"):
+            validate_url("http://169.254.169.254/latest/meta-data/")
+
+    def test_rejects_private_10_range(self):
+        """RFC-1918 10.x.x.x range must raise ValueError."""
+        from project_forge.engine.url_ingest import validate_url
+
+        with pytest.raises(ValueError, match="private"):
+            validate_url("http://10.0.0.1/")
+
+    def test_allows_public_ip(self):
+        """Public IPs must pass validation without raising."""
+        from project_forge.engine.url_ingest import validate_url
+
+        # Mock DNS resolution to return a known public IP (93.184.216.34 = example.com)
+        public_addrinfo = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("93.184.216.34", 0))]
+        with patch("socket.getaddrinfo", return_value=public_addrinfo):
+            result = validate_url("https://example.com")
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_fetch_rejects_private_url(self):
+        """fetch_url_content() must raise ValueError for private IPs before making any HTTP request."""
+        from project_forge.engine.url_ingest import fetch_url_content
+
+        with patch("project_forge.engine.url_ingest.httpx.AsyncClient") as mock_client:
+            with pytest.raises(ValueError, match="private"):
+                await fetch_url_content("http://127.0.0.1/")
+            # Confirm no HTTP request was made
+            mock_client.assert_not_called()

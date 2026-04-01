@@ -95,8 +95,18 @@ class TestBuildIntrospectionPrompt:
     def _make_context(self) -> dict:
         return {
             "open_issues": [
-                {"number": 42, "title": "Add rate limiting to API", "labels": [], "url": "https://github.com/x/y/issues/42"},
-                {"number": 7, "title": "Tests missing for scorer module", "labels": [], "url": "https://github.com/x/y/issues/7"},
+                {
+                    "number": 42,
+                    "title": "Add rate limiting to API",
+                    "labels": [],
+                    "url": "https://github.com/x/y/issues/42",
+                },
+                {
+                    "number": 7,
+                    "title": "Tests missing for scorer module",
+                    "labels": [],
+                    "url": "https://github.com/x/y/issues/7",
+                },
             ],
             "recent_commits": [
                 "abc1234 feat: add dashboard tabs",

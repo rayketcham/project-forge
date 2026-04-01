@@ -31,15 +31,9 @@ async def test_csp_no_unsafe_inline_scripts(client):
     assert csp, "CSP header is missing entirely"
 
     # Extract only the script-src directive value
-    directives = {
-        part.strip().split()[0]: part.strip()
-        for part in csp.split(";")
-        if part.strip()
-    }
+    directives = {part.strip().split()[0]: part.strip() for part in csp.split(";") if part.strip()}
     script_src = directives.get("script-src", "")
-    assert "'unsafe-inline'" not in script_src, (
-        f"'unsafe-inline' must not appear in script-src. Got: {script_src!r}"
-    )
+    assert "'unsafe-inline'" not in script_src, f"'unsafe-inline' must not appear in script-src. Got: {script_src!r}"
 
 
 def test_no_inline_script_blocks_in_templates():
@@ -57,10 +51,7 @@ def test_no_inline_script_blocks_in_templates():
             if stripped.startswith("<script") and "src=" not in stripped:
                 violations.append(f"{path.name}:{lineno}: {line.strip()}")
 
-    assert not violations, (
-        "Inline <script> blocks found in templates — move to app.js:\n"
-        + "\n".join(violations)
-    )
+    assert not violations, "Inline <script> blocks found in templates — move to app.js:\n" + "\n".join(violations)
 
 
 def test_no_onclick_handlers_in_templates():
@@ -76,9 +67,8 @@ def test_no_onclick_handlers_in_templates():
             if "onclick=" in line:
                 violations.append(f"{path.name}:{lineno}: {line.strip()}")
 
-    assert not violations, (
-        "onclick= attributes found in templates — move to addEventListener in app.js:\n"
-        + "\n".join(violations)
+    assert not violations, "onclick= attributes found in templates — move to addEventListener in app.js:\n" + "\n".join(
+        violations
     )
 
 
@@ -95,14 +85,10 @@ def test_app_js_has_promote_function():
 def test_app_js_has_reject_function():
     """app.js must define the rejectProposal function."""
     content = APP_JS.read_text()
-    assert "rejectProposal" in content, (
-        "rejectProposal function not found in app.js"
-    )
+    assert "rejectProposal" in content, "rejectProposal function not found in app.js"
 
 
 def test_app_js_has_switch_tab():
     """app.js must define the switchTab function (already present, must not be removed)."""
     content = APP_JS.read_text()
-    assert "function switchTab" in content, (
-        "switchTab function not found in app.js — must not be removed"
-    )
+    assert "function switchTab" in content, "switchTab function not found in app.js — must not be removed"

@@ -125,6 +125,7 @@ async def test_csp_headers(client):
 # Scaffold route tests
 # ---------------------------------------------------------------------------
 
+
 def _make_idea(**overrides) -> Idea:
     """Factory for a minimal valid Idea."""
     defaults = dict(
@@ -228,6 +229,4 @@ async def test_scaffold_github_error_returns_500(client):
 async def test_explore_invalid_category_returns_error(client):
     """Passing an unknown category value must return 400 or 422, not a 500 crash."""
     resp = await client.get("/explore?category=not-a-real-category")
-    assert resp.status_code in (400, 422), (
-        f"Expected 400 or 422 for unknown category, got {resp.status_code}"
-    )
+    assert resp.status_code in (400, 422), f"Expected 400 or 422 for unknown category, got {resp.status_code}"

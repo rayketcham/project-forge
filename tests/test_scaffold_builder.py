@@ -35,7 +35,6 @@ class TestSanitizeRepoName:
         result = sanitize_repo_name("x" * 200)
         assert len(result) <= 100
 
-
     def test_sanitize_repo_name_all_special_chars(self):
         result = sanitize_repo_name("!@#$%^&*()")
         assert result != "", "All-special-char input must not produce an empty repo name"

@@ -132,9 +132,7 @@ async def run_horizontal_cycle(db: Database) -> list[Idea]:
 
     if len(ideas) < 2:
         # Fallback: generate a second cross-category idea with a different pair
-        cat_c, cat_d = await pick_cross_category_pair(
-            db, exclude=[(cat_a, cat_b)]
-        )
+        cat_c, cat_d = await pick_cross_category_pair(db, exclude=[(cat_a, cat_b)])
         idea2 = await generate_cross_idea(db, cat_c, cat_d)
         await db.save_idea(idea2)
         await db.record_category_pair(cat_c.value, cat_d.value, idea2.id)

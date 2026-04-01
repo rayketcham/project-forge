@@ -1,6 +1,8 @@
 """URL ingestion engine — fetch URLs, extract content, generate ideas."""
 
+import ipaddress
 import re
+import socket
 from dataclasses import dataclass
 from urllib.parse import parse_qs, urlencode, urlparse
 
@@ -31,15 +33,69 @@ class UrlContent:
     text: str
 
 
+def _check_ssrf(hostname: str) -> None:
+    """Resolve hostname and raise ValueError if it resolves to a private/reserved address.
+
+    Protects against Server-Side Request Forgery (SSRF) by blocking requests
+    to loopback, private, link-local, and other reserved IP ranges.
+
+    Raises:
+        ValueError: If the hostname resolves to a non-public IP address.
+        socket.gaierror: If the hostname cannot be resolved (propagated to caller).
+    """
+    try:
+        addrinfos = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        # DNS resolution failure — not a private IP issue; let caller handle
+        raise
+
+    for addrinfo in addrinfos:
+        raw_ip = addrinfo[4][0]
+        try:
+            addr = ipaddress.ip_address(raw_ip)
+        except ValueError:
+            continue
+        if addr.is_loopback or addr.is_private or addr.is_link_local or addr.is_reserved:
+            raise ValueError(f"Requests to private/reserved addresses are not allowed: {raw_ip}")
+
+
 def validate_url(url: str) -> bool:
-    """Check if URL is valid http(s)."""
+    """Check if URL is valid http(s) and does not point to a private/reserved address.
+
+    Returns:
+        True if the URL is structurally valid and resolves to a public address.
+
+    Raises:
+        ValueError: If the URL resolves to a private, loopback, or link-local IP (SSRF guard).
+    """
     if not url:
         return False
     try:
         parsed = urlparse(url)
-        return parsed.scheme in ("http", "https") and bool(parsed.netloc)
+        if not (parsed.scheme in ("http", "https") and bool(parsed.netloc)):
+            return False
     except Exception:
         return False
+
+    # Strip port from netloc to get bare hostname for DNS resolution
+    hostname = parsed.hostname
+    if not hostname:
+        return False
+
+    # For bare IP addresses, validate directly without a DNS lookup
+    try:
+        addr = ipaddress.ip_address(hostname)
+        if addr.is_loopback or addr.is_private or addr.is_link_local or addr.is_reserved:
+            raise ValueError(f"Requests to private/reserved addresses are not allowed: {hostname}")
+        return True
+    except ValueError as exc:
+        # Re-raise only the SSRF guard errors; ignore the "not a valid IP" parse error
+        if "not allowed" in str(exc):
+            raise
+
+    # Hostname is not a bare IP — resolve via DNS
+    _check_ssrf(hostname)
+    return True
 
 
 def extract_domain(url: str) -> str:
@@ -63,8 +119,19 @@ def clean_url(url: str) -> str:
 
 
 async def fetch_url_content(url: str) -> UrlContent:
-    """Fetch URL and extract content."""
-    async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
+    """Fetch URL and extract content.
+
+    Validates the URL for SSRF safety before making any network request.
+    Redirects are disabled to prevent redirect-based SSRF bypasses.
+
+    Raises:
+        ValueError: If the URL resolves to a private/reserved address.
+        UrlFetchError: If the HTTP response indicates an error (status >= 400).
+    """
+    # SSRF guard — must run before any network I/O
+    validate_url(url)
+
+    async with httpx.AsyncClient(follow_redirects=False, timeout=30.0) as client:
         response = await client.get(url)
 
     if response.status_code >= 400:

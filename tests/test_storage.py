@@ -225,9 +225,7 @@ async def test_list_super_ideas_deduplicates_by_name(db):
         await db.save_idea(idea)
 
     results = await db.list_super_ideas(limit=10)
-    assert len(results) == 1, (
-        f"Expected exactly 1 deduplicated super idea, got {len(results)}"
-    )
+    assert len(results) == 1, f"Expected exactly 1 deduplicated super idea, got {len(results)}"
     assert results[0].feasibility_score == 0.9, (
         f"Expected highest-scoring row (0.9), got {results[0].feasibility_score}"
     )

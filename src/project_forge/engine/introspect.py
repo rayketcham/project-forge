@@ -51,11 +51,17 @@ def gather_self_context() -> dict:
     # --- Open GitHub issues ---
     open_issues: list[dict] = []
     try:
-        result = _run([
-            "gh", "issue", "list",
-            "--state", "open",
-            "--json", "title,number,labels,url",
-        ])
+        result = _run(
+            [
+                "gh",
+                "issue",
+                "list",
+                "--state",
+                "open",
+                "--json",
+                "title,number,labels,url",
+            ]
+        )
         if result.returncode == 0 and result.stdout.strip():
             open_issues = json.loads(result.stdout)
     except (FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError) as exc:
@@ -164,8 +170,7 @@ def build_introspection_prompt(context: dict, recent_improvements: list[str]) ->
     issues = context.get("open_issues", [])
     if issues:
         issues_lines = "\n".join(
-            f"- #{i.get('number', '?')}: {i.get('title', '(no title)')} — {i.get('url', '')}"
-            for i in issues
+            f"- #{i.get('number', '?')}: {i.get('title', '(no title)')} — {i.get('url', '')}" for i in issues
         )
     else:
         issues_lines = "(no open issues)"

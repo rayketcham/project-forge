@@ -208,12 +208,8 @@ class TestPushInitialCommit:
 
         # Regardless of push failure, cleanup set-url must have been called
         # with the clean (token-free) URL as the final set-url invocation.
-        set_url_calls = [
-            c for c in mock_run.call_args_list if c[0][0][0:3] == ["git", "remote", "set-url"]
-        ]
-        assert len(set_url_calls) == 2, (
-            "Expected two git remote set-url calls: one to embed token, one to clean it up"
-        )
+        set_url_calls = [c for c in mock_run.call_args_list if c[0][0][0:3] == ["git", "remote", "set-url"]]
+        assert len(set_url_calls) == 2, "Expected two git remote set-url calls: one to embed token, one to clean it up"
         cleanup_call_url = set_url_calls[-1][0][0][-1]
         assert token not in cleanup_call_url, (
             f"Token was NOT cleaned from remote URL after push failure — leaked: {cleanup_call_url}"

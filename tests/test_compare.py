@@ -277,9 +277,7 @@ class TestCompareAPI:
         ):
             # Simulate list_org_repos returning realistic gh output
             mock_run.return_value.returncode = 0
-            mock_run.return_value.stdout = (
-                "rayketcham-lab/pki-ca-engine\tPKI CA\tpublic\n"
-            )
+            mock_run.return_value.stdout = "rayketcham-lab/pki-ca-engine\tPKI CA\tpublic\n"
             mock_run.return_value.stderr = ""
 
             resp = await client.get("/api/repos")

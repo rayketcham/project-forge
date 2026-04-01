@@ -49,10 +49,16 @@ class TestIntrospectRunner:
         )
         mock_generator.generate = AsyncMock(return_value=fake_idea)
 
-        with patch("project_forge.cron.introspect_runner.gather_self_context", return_value={
-            "open_issues": [], "recent_commits": [], "test_count": 10,
-            "lint_status": "clean", "code_stats": {"src": 1000, "tests": 500},
-        }):
+        with patch(
+            "project_forge.cron.introspect_runner.gather_self_context",
+            return_value={
+                "open_issues": [],
+                "recent_commits": [],
+                "test_count": 10,
+                "lint_status": "clean",
+                "code_stats": {"src": 1000, "tests": 500},
+            },
+        ):
             idea = await run_introspect_cycle(mock_db, mock_generator)
 
         assert idea is not None
@@ -92,10 +98,19 @@ class TestIntrospectRunner:
         )
         mock_generator.generate = AsyncMock(return_value=fake_idea)
 
-        with patch("project_forge.cron.introspect_runner.gather_self_context", return_value={
-            "open_issues": [], "recent_commits": [], "test_count": 10,
-            "lint_status": "clean", "code_stats": {},
-        }), patch("project_forge.cron.introspect_runner.build_introspection_prompt") as mock_prompt:
+        with (
+            patch(
+                "project_forge.cron.introspect_runner.gather_self_context",
+                return_value={
+                    "open_issues": [],
+                    "recent_commits": [],
+                    "test_count": 10,
+                    "lint_status": "clean",
+                    "code_stats": {},
+                },
+            ),
+            patch("project_forge.cron.introspect_runner.build_introspection_prompt") as mock_prompt,
+        ):
             mock_prompt.return_value = "fake prompt"
             await run_introspect_cycle(mock_db, mock_generator)
 
