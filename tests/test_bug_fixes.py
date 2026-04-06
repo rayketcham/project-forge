@@ -125,12 +125,12 @@ class TestBug17BrowserPostAuth:
             assert response.status_code == 401
 
     @pytest.mark.asyncio
-    async def test_base_template_includes_api_token_meta(self):
-        """Base template must inject api-token meta tag when token is set."""
+    async def test_base_template_no_api_token_meta(self):
+        """Base template must NOT inject api-token meta tag (#42 — security fix)."""
         from project_forge.web.app import templates
 
-        # Check that get_api_token is available in template globals
-        assert "get_api_token" in templates.env.globals
+        # get_api_token must NOT be in template globals
+        assert "get_api_token" not in templates.env.globals
 
     @pytest.mark.asyncio
     async def test_app_js_uses_auth_headers(self):

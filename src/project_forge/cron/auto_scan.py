@@ -11,6 +11,7 @@ import random
 from datetime import UTC, datetime
 
 from project_forge.engine.categories import CATEGORY_SEEDS, COMBINATORIC_TEMPLATES, CONTRARIAN_PROMPTS
+from project_forge.engine.dedup import filter_and_save
 from project_forge.engine.quality_review import review_idea
 from project_forge.models import GenerationRun, Idea, IdeaCategory
 from project_forge.storage.db import Database
@@ -382,7 +383,10 @@ async def run_auto_scan(db: Database, count: int = 5) -> list[Idea]:
             if not qr.passed:
                 logger.warning("Auto-scan idea '%s' rejected: %s", idea.name, "; ".join(qr.reasons))
                 continue
-            await db.save_idea(idea)
+            _, accepted, filter_reason = await filter_and_save(idea, db)
+            if not accepted:
+                logger.info("Auto-scan idea '%s' filtered: %s", idea.name, filter_reason)
+                continue
             recent_names.add(idea.name)
             ideas.append(idea)
             run.idea_id = idea.id

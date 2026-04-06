@@ -143,3 +143,63 @@ def compare_idea_to_repo(idea: Idea, repo_details: dict) -> dict:
         "reason": reason,
         "matching_keywords": matching_list,
     }
+
+
+def compare_ideas(idea_a: Idea, idea_b: Idea) -> dict:
+    """Compare two ideas head-to-head using keyword overlap and feasibility scores.
+
+    Returns dict with overlap_score (0-1), verdict, reason, matching_keywords, winner.
+    """
+    text_a = " ".join([idea_a.name, idea_a.tagline, idea_a.description, " ".join(idea_a.tech_stack)])
+    text_b = " ".join([idea_b.name, idea_b.tagline, idea_b.description, " ".join(idea_b.tech_stack)])
+
+    keywords_a = _extract_keywords(text_a)
+    keywords_b = _extract_keywords(text_b)
+
+    if not keywords_a or not keywords_b:
+        return {
+            "overlap_score": 0.0,
+            "verdict": "distinct",
+            "reason": "Insufficient data for comparison.",
+            "matching_keywords": [],
+            "winner": idea_a.id if idea_a.feasibility_score >= idea_b.feasibility_score else idea_b.id,
+        }
+
+    matching = keywords_a & keywords_b
+    coverage_a = len(matching) / len(keywords_a)
+    coverage_b = len(matching) / len(keywords_b)
+    overlap_score = round((coverage_a + coverage_b) / 2, 2)
+
+    if overlap_score >= 0.4:
+        verdict = "similar" if overlap_score < 0.6 else "duplicate"
+    else:
+        verdict = "distinct"
+
+    winner = idea_a.id if idea_a.feasibility_score >= idea_b.feasibility_score else idea_b.id
+
+    matching_list = sorted(matching)
+    if verdict == "duplicate":
+        reason = (
+            f"High overlap ({overlap_score:.0%}) between '{idea_a.name}' and '{idea_b.name}'. "
+            f"Shared concepts: {', '.join(matching_list[:10])}. "
+            "These ideas likely duplicate each other."
+        )
+    elif verdict == "similar":
+        reason = (
+            f"Moderate overlap ({overlap_score:.0%}) between '{idea_a.name}' and '{idea_b.name}'. "
+            f"Shared concepts: {', '.join(matching_list[:10])}. "
+            "Consider merging or selecting the stronger idea."
+        )
+    else:
+        reason = (
+            f"Low overlap ({overlap_score:.0%}) between '{idea_a.name}' and '{idea_b.name}'. "
+            "These are distinct project concepts."
+        )
+
+    return {
+        "overlap_score": overlap_score,
+        "verdict": verdict,
+        "reason": reason,
+        "matching_keywords": matching_list,
+        "winner": winner,
+    }

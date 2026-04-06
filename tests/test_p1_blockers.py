@@ -175,7 +175,7 @@ class TestApproveIdempotency:
         data = resp.json()
         # Status should NOT be "approved" since the GH issue wasn't created
         if resp.status_code == 502:
-            assert "gh auth expired" in data.get("detail", "")
+            assert "GitHub issue creation failed" in data.get("detail", "")
         # The idea should still be "new" in DB
         updated = await db.get_idea(idea.id)
         assert updated.status == "new"

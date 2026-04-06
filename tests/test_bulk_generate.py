@@ -84,18 +84,41 @@ class TestBulkGenerator:
     async def test_generate_batch(self, mock_anthropic_cls, db):
         mock_client = MagicMock()
         mock_anthropic_cls.return_value = mock_client
-        mock_content = MagicMock()
-        mock_content.text = MOCK_IDEA_JSON
-        mock_response = MagicMock()
-        mock_response.content = [mock_content]
-        mock_client.messages.create.return_value = mock_response
+
+        # Return genuinely distinct ideas per call so dedup doesn't filter them
+        taglines = [
+            "quantum-safe certificate revocation list signing tool",
+            "lattice-based key encapsulation benchmark suite",
+            "hybrid TLS handshake protocol analyzer for migration",
+        ]
+        call_count = 0
+
+        def _make_response(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            idea_json = json.dumps({
+                "name": f"PQC Tool {call_count}",
+                "tagline": taglines[call_count - 1],
+                "description": "PQC tooling for post-quantum migration.",
+                "category": "pqc-cryptography",
+                "market_analysis": "PQC transition is happening now.",
+                "feasibility_score": 0.8,
+                "mvp_scope": "Build the core tool.",
+                "tech_stack": ["python", "openssl", "cryptography"],
+            })
+            mock_content = MagicMock()
+            mock_content.text = idea_json
+            mock_response = MagicMock()
+            mock_response.content = [mock_content]
+            return mock_response
+
+        mock_client.messages.create.side_effect = _make_response
 
         config = BulkConfig(target_count=3, batch_size=3)
         bulk = BulkGenerator(db=db, api_key="test-key", config=config)
         ideas = await bulk.generate_batch(count=3)
 
         assert len(ideas) == 3
-        assert all(i.name == "CRL Quantum Guard" for i in ideas)
 
     @patch("project_forge.engine.generator.anthropic.Anthropic")
     @pytest.mark.asyncio
@@ -149,15 +172,29 @@ class TestBulkGenerator:
     async def test_generate_handles_errors_gracefully(self, mock_anthropic_cls, db):
         mock_client = MagicMock()
         mock_anthropic_cls.return_value = mock_client
-        # First call succeeds, second fails, third succeeds
-        mock_content = MagicMock()
-        mock_content.text = MOCK_IDEA_JSON
-        mock_response = MagicMock()
-        mock_response.content = [mock_content]
+
+        # Return distinct ideas so dedup doesn't filter the second success
+        def _make_resp(tagline):
+            idea_json = json.dumps({
+                "name": f"Tool for {tagline[:20]}",
+                "tagline": tagline,
+                "description": "Manages CRLs with PQC signatures.",
+                "category": "pqc-cryptography",
+                "market_analysis": "PQC transition is happening now.",
+                "feasibility_score": 0.8,
+                "mvp_scope": "CRL signing tool with ML-DSA.",
+                "tech_stack": ["python", "openssl", "cryptography"],
+            })
+            content = MagicMock()
+            content.text = idea_json
+            resp = MagicMock()
+            resp.content = [content]
+            return resp
+
         mock_client.messages.create.side_effect = [
-            mock_response,
+            _make_resp("quantum-safe certificate revocation list signing"),
             RuntimeError("API error"),
-            mock_response,
+            _make_resp("lattice-based key encapsulation benchmark suite"),
         ]
 
         config = BulkConfig(target_count=3, batch_size=3)

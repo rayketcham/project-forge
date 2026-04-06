@@ -10,8 +10,17 @@ from pathlib import Path
 
 import aiosqlite
 
-from project_forge.engine.dedup import SIMILARITY_THRESHOLD, tagline_similarity
-from project_forge.models import Challenge, FilteredIdea, GenerationRun, Idea, IdeaCategory, IdeaStatus, Resource
+from project_forge.models import (
+    Challenge,
+    FilteredIdea,
+    GenerationRun,
+    Idea,
+    IdeaCategory,
+    IdeaDenial,
+    IdeaStatus,
+    Resource,
+    SelectionRound,
+)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS ideas (
@@ -116,6 +125,25 @@ CREATE TABLE IF NOT EXISTS resources (
     idea_count INTEGER NOT NULL DEFAULT 0,
     added_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS idea_denials (
+    id TEXT PRIMARY KEY,
+    idea_id TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    denied_by TEXT,
+    denied_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_denials_idea ON idea_denials(idea_id);
+
+CREATE TABLE IF NOT EXISTS selection_rounds (
+    id TEXT PRIMARY KEY,
+    round_number INTEGER NOT NULL,
+    idea_ids TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'pending',
+    results TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL
+);
 """
 
 
@@ -164,32 +192,6 @@ class Database:
 
     async def save_idea(self, idea: Idea) -> Idea:
         content_hash = getattr(idea, "content_hash", None)
-        if content_hash:
-            # Check if content_hash already exists -- skip if duplicate
-            cursor = await self.db.execute("SELECT id FROM ideas WHERE content_hash = ?", (content_hash,))
-            existing = await cursor.fetchone()
-            if existing:
-                await self._log_filtered(idea, "duplicate:content_hash", similar_to_id=existing[0])
-                return idea
-
-        # Universal fuzzy dedup: check tagline similarity within same category
-        # Skip for super ideas — they're synthesized from existing ideas, not duplicates
-        # Only block against non-rejected ideas (rejected ideas can be re-proposed)
-        if not idea.name.startswith("[SUPER]"):
-            cursor = await self.db.execute(
-                "SELECT id, tagline FROM ideas WHERE category = ? AND status != 'rejected'",
-                (idea.category.value,),
-            )
-            rows = await cursor.fetchall()
-            for row in rows:
-                existing_id, existing_tagline = row[0], row[1]
-                score = tagline_similarity(idea.tagline, existing_tagline)
-                if score >= SIMILARITY_THRESHOLD:
-                    await self._log_filtered(
-                        idea, f"duplicate:tagline_similarity:{score:.2f}", similar_to_id=existing_id
-                    )
-                    return idea
-
         await self.db.execute(
             """INSERT OR REPLACE INTO ideas
             (id, name, tagline, description, category, market_analysis,
@@ -441,6 +443,14 @@ class Database:
         row = await cursor.fetchone()
         challenge_count = row[0] if row else 0
 
+        cursor = await self.db.execute("SELECT COUNT(*) FROM selection_rounds")
+        row = await cursor.fetchone()
+        total_rounds = row[0] if row else 0
+
+        cursor = await self.db.execute("SELECT COUNT(*) FROM idea_denials")
+        row = await cursor.fetchone()
+        total_denials = row[0] if row else 0
+
         return {
             "total_ideas": sum(ideas_by_status.values()),
             "ideas_by_status": ideas_by_status,
@@ -449,6 +459,8 @@ class Database:
             "avg_feasibility_score": avg_score,
             "super_ideas": super_count,
             "total_challenges": challenge_count,
+            "total_rounds": total_rounds,
+            "total_denials": total_denials,
         }
 
     # === CHALLENGES ===
@@ -559,6 +571,96 @@ class Database:
             }
             for row in rows
         ]
+
+    # === IDEA DENIALS ===
+
+    async def save_denial(self, denial: IdeaDenial) -> IdeaDenial:
+        """Save a denial record and set the idea status to 'rejected'."""
+        await self.db.execute(
+            """INSERT INTO idea_denials (id, idea_id, reason, denied_by, denied_at)
+            VALUES (?, ?, ?, ?, ?)""",
+            (denial.id, denial.idea_id, denial.reason, denial.denied_by, denial.denied_at.isoformat()),
+        )
+        await self.db.execute("UPDATE ideas SET status = 'rejected' WHERE id = ?", (denial.idea_id,))
+        await self.db.commit()
+        return denial
+
+    async def get_denials(self, idea_id: str) -> list[IdeaDenial]:
+        """Return all denials for an idea, oldest first."""
+        cursor = await self.db.execute(
+            "SELECT * FROM idea_denials WHERE idea_id = ? ORDER BY denied_at ASC",
+            (idea_id,),
+        )
+        rows = await cursor.fetchall()
+        return [
+            IdeaDenial(
+                id=row["id"],
+                idea_id=row["idea_id"],
+                reason=row["reason"],
+                denied_by=row["denied_by"],
+                denied_at=datetime.fromisoformat(row["denied_at"]),
+            )
+            for row in rows
+        ]
+
+    # === SELECTION ROUNDS ===
+
+    async def save_round(self, sr: SelectionRound) -> SelectionRound:
+        """Save a selection round."""
+        await self.db.execute(
+            """INSERT INTO selection_rounds (id, round_number, idea_ids, status, results, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)""",
+            (sr.id, sr.round_number, json.dumps(sr.idea_ids), sr.status,
+             json.dumps(sr.results), sr.created_at.isoformat()),
+        )
+        await self.db.commit()
+        return sr
+
+    async def get_round(self, round_id: str) -> SelectionRound | None:
+        """Get a selection round by ID."""
+        cursor = await self.db.execute("SELECT * FROM selection_rounds WHERE id = ?", (round_id,))
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        return SelectionRound(
+            id=row["id"],
+            round_number=row["round_number"],
+            idea_ids=json.loads(row["idea_ids"]),
+            status=row["status"],
+            results=json.loads(row["results"]),
+            created_at=datetime.fromisoformat(row["created_at"]),
+        )
+
+    async def list_rounds(self) -> list[SelectionRound]:
+        """List all selection rounds, newest first."""
+        cursor = await self.db.execute("SELECT * FROM selection_rounds ORDER BY created_at DESC")
+        rows = await cursor.fetchall()
+        return [
+            SelectionRound(
+                id=row["id"],
+                round_number=row["round_number"],
+                idea_ids=json.loads(row["idea_ids"]),
+                status=row["status"],
+                results=json.loads(row["results"]),
+                created_at=datetime.fromisoformat(row["created_at"]),
+            )
+            for row in rows
+        ]
+
+    async def update_round_status(self, round_id: str, status: str) -> SelectionRound | None:
+        """Update a round's status."""
+        await self.db.execute("UPDATE selection_rounds SET status = ? WHERE id = ?", (status, round_id))
+        await self.db.commit()
+        return await self.get_round(round_id)
+
+    async def save_round_results(self, round_id: str, results: list[dict]) -> SelectionRound | None:
+        """Save comparison results and mark round completed."""
+        await self.db.execute(
+            "UPDATE selection_rounds SET results = ?, status = 'completed' WHERE id = ?",
+            (json.dumps(results), round_id),
+        )
+        await self.db.commit()
+        return await self.get_round(round_id)
 
     # === DEDUP CLEANUP ===
 

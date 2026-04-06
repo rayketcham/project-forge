@@ -285,7 +285,9 @@ class SuperIdeaGenerator:
             tech_stack=si.tech_stack,
             status="new",
         )
-        await self.db.save_idea(idea)
+        from project_forge.engine.dedup import filter_and_save
+
+        await filter_and_save(idea, self.db)
 
     async def generate(self, count: int = 5) -> list[SuperIdea]:
         """Generate super ideas by clustering and synthesizing all ideas."""

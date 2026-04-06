@@ -6,6 +6,7 @@ import os
 import sys
 
 from project_forge.config import settings
+from project_forge.engine.dedup import filter_and_save
 from project_forge.engine.introspect import build_introspection_prompt, gather_self_context
 from project_forge.engine.quality_review import review_idea
 from project_forge.models import IdeaCategory
@@ -42,7 +43,10 @@ async def run_introspect_cycle(db: Database, generator) -> "Idea":  # noqa: F821
         logger.warning("Rejected SI idea '%s': %s", idea.name, "; ".join(result.reasons))
         return None
 
-    await db.save_idea(idea)
+    _, accepted, reason = await filter_and_save(idea, db)
+    if not accepted:
+        logger.info("Introspection idea '%s' filtered: %s", idea.name, reason)
+        return None
     logger.info("Introspection generated: %s (score: %.2f)", idea.name, idea.feasibility_score)
     return idea
 

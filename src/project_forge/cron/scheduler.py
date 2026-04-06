@@ -6,9 +6,10 @@ import tempfile
 from datetime import UTC, datetime
 
 from project_forge.config import settings
+from project_forge.engine.dedup import filter_and_save
 from project_forge.engine.generator import IdeaGenerator
 from project_forge.engine.quality_review import review_idea
-from project_forge.engine.scorer import is_high_value
+from project_forge.engine.scorer import is_high_value, score_idea
 from project_forge.models import GenerationRun, Idea, IdeaCategory
 from project_forge.scaffold.builder import build_scaffold_spec, render_scaffold
 from project_forge.scaffold.github import create_issue, create_label, create_repo, push_initial_commit
@@ -20,12 +21,23 @@ ALL_CATEGORIES = list(IdeaCategory)
 
 
 async def pick_category(db: Database) -> IdeaCategory:
-    """Pick a category, avoiding recent repeats."""
+    """Pick a category, avoiding recent repeats and saturated categories."""
     recent = await db.get_recent_categories(limit=3)
     available = [c for c in ALL_CATEGORIES if c.value not in recent]
     if not available:
         available = ALL_CATEGORIES
-    return random.choice(available)
+
+    # Check saturation — deprioritize categories with 0 unused tuples
+    weighted: list[tuple[IdeaCategory, float]] = []
+    for cat in available:
+        unused_tuple_count = await db.get_unused_tuple_count(cat)
+        weight = max(unused_tuple_count, 1)  # minimum weight of 1
+        weighted.append((cat, weight))
+
+    total = sum(w for _, w in weighted)
+    choices = [c for c, _ in weighted]
+    weights = [w / total for _, w in weighted]
+    return random.choices(choices, weights=weights, k=1)[0]
 
 
 async def generate_and_store(db: Database, generator: IdeaGenerator) -> Idea:
@@ -55,7 +67,19 @@ async def generate_and_store(db: Database, generator: IdeaGenerator) -> Idea:
             run.completed_at = datetime.now(UTC)
             await db.save_run(run)
             return None
-        await db.save_idea(idea)
+        # Independent scoring
+        corpus = await db.list_ideas(limit=50)
+        scores = score_idea(idea, corpus=corpus)
+        idea.feasibility_score = scores["composite"]
+
+        # Dedup gate
+        _, accepted, reason = await filter_and_save(idea, db)
+        if not accepted:
+            logger.info("Idea '%s' filtered by dedup: %s", idea.name, reason)
+            run.error = f"Filtered: {reason}"
+            run.completed_at = datetime.now(UTC)
+            await db.save_run(run)
+            return None
         run.idea_id = idea.id
         run.success = True
         run.completed_at = datetime.now(UTC)

@@ -139,12 +139,11 @@ async def test_no_auth_required_when_token_not_set(client):
 
 
 @pytest.mark.asyncio
-async def test_api_token_injected_in_meta_tag_when_set(authed_client):
-    """When FORGE_API_TOKEN is set, pages must include a <meta name='api-token'> tag."""
+async def test_api_token_not_in_html_when_set(authed_client):
+    """API token must never appear in HTML (#42 — security fix)."""
     resp = await authed_client.get("/")
     assert resp.status_code == 200
-    assert 'name="api-token"' in resp.text
-    assert 'content="test-secret"' in resp.text
+    assert 'name="api-token"' not in resp.text
 
 
 @pytest.mark.asyncio
@@ -156,11 +155,11 @@ async def test_api_token_meta_tag_absent_when_not_set(client):
 
 
 @pytest.mark.asyncio
-async def test_idea_detail_includes_api_token_meta(authed_client):
-    """Idea detail page must include the api-token meta tag for approve/reject to work."""
+async def test_idea_detail_no_api_token_meta(authed_client):
+    """Idea detail page must NOT include the api-token meta tag (#42 — security fix)."""
     idea = _make_idea(status="new")
     await db.save_idea(idea)
 
     resp = await authed_client.get(f"/ideas/{idea.id}")
     assert resp.status_code == 200
-    assert 'name="api-token"' in resp.text
+    assert 'name="api-token"' not in resp.text

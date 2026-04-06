@@ -52,15 +52,25 @@ class TestIntrospectRunner:
         )
         mock_generator.generate = AsyncMock(return_value=fake_idea)
 
-        with patch(
-            "project_forge.cron.introspect_runner.gather_self_context",
-            return_value={
-                "open_issues": [],
-                "recent_commits": [],
-                "test_count": 10,
-                "lint_status": "clean",
-                "code_stats": {"src": 1000, "tests": 500},
-            },
+        async def _mock_filter_and_save(idea, db):
+            await db.save_idea(idea)
+            return idea, True, None
+
+        with (
+            patch(
+                "project_forge.cron.introspect_runner.gather_self_context",
+                return_value={
+                    "open_issues": [],
+                    "recent_commits": [],
+                    "test_count": 10,
+                    "lint_status": "clean",
+                    "code_stats": {"src": 1000, "tests": 500},
+                },
+            ),
+            patch(
+                "project_forge.cron.introspect_runner.filter_and_save",
+                side_effect=_mock_filter_and_save,
+            ),
         ):
             idea = await run_introspect_cycle(mock_db, mock_generator)
 
@@ -101,6 +111,10 @@ class TestIntrospectRunner:
         )
         mock_generator.generate = AsyncMock(return_value=fake_idea)
 
+        async def _mock_filter_and_save(idea, db):
+            await db.save_idea(idea)
+            return idea, True, None
+
         with (
             patch(
                 "project_forge.cron.introspect_runner.gather_self_context",
@@ -113,6 +127,10 @@ class TestIntrospectRunner:
                 },
             ),
             patch("project_forge.cron.introspect_runner.build_introspection_prompt") as mock_prompt,
+            patch(
+                "project_forge.cron.introspect_runner.filter_and_save",
+                side_effect=_mock_filter_and_save,
+            ),
         ):
             mock_prompt.return_value = "fake prompt"
             await run_introspect_cycle(mock_db, mock_generator)

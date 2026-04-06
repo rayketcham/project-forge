@@ -11,8 +11,17 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from project_forge.config import settings
+from project_forge.engine.dedup import filter_and_save
 from project_forge.engine.scorer import score_summary
-from project_forge.models import Challenge, IdeaCategory, IdeaStatus, Resource, UrlIngestRequest
+from project_forge.models import (
+    Challenge,
+    IdeaCategory,
+    IdeaDenial,
+    IdeaStatus,
+    Resource,
+    SelectionRound,
+    UrlIngestRequest,
+)
 from project_forge.scaffold.github import create_issue
 from project_forge.web.app import db, templates
 
@@ -148,7 +157,8 @@ async def approve_idea(idea_id: str, request: Request):
         try:
             issue_url = _promote_to_ci_queue(idea)
         except RuntimeError as exc:
-            raise HTTPException(status_code=502, detail=f"GitHub issue creation failed: {exc}") from exc
+            logger.error("GitHub issue creation failed for %s: %s", idea_id, exc)
+            raise HTTPException(status_code=502, detail="GitHub issue creation failed. Check server logs.") from exc
         await db.update_idea_urls(idea_id, github_issue_url=issue_url)
         await db.update_idea_status(idea_id, "approved")
         return {"status": "approved", "id": idea_id, "issue_url": issue_url}
@@ -163,6 +173,103 @@ async def reject_idea(idea_id: str):
     if not idea:
         raise HTTPException(status_code=404, detail="Idea not found")
     return {"status": "rejected", "id": idea_id}
+
+
+class DenyRequest(BaseModel):
+    reason: str = Field(min_length=1)
+    denied_by: str | None = None
+
+
+@router.post("/api/ideas/{idea_id}/deny")
+async def deny_idea(idea_id: str, body: DenyRequest):
+    idea = await db.get_idea(idea_id)
+    if not idea:
+        raise HTTPException(status_code=404, detail="Idea not found")
+    denial = IdeaDenial(idea_id=idea_id, reason=body.reason, denied_by=body.denied_by)
+    await db.save_denial(denial)
+    return {"status": "rejected", "id": idea_id, "denial_id": denial.id}
+
+
+class CreateRoundRequest(BaseModel):
+    idea_ids: list[str] = Field(min_length=2)
+
+
+@router.post("/api/rounds")
+async def create_round(body: CreateRoundRequest):
+    # Auto-determine round number
+    existing = await db.list_rounds()
+    round_number = len(existing) + 1
+    sr = SelectionRound(round_number=round_number, idea_ids=body.idea_ids)
+    await db.save_round(sr)
+    return {"id": sr.id, "round_number": sr.round_number, "idea_ids": sr.idea_ids, "status": sr.status}
+
+
+@router.get("/api/rounds")
+async def list_rounds():
+    rounds = await db.list_rounds()
+    return {"rounds": [
+        {"id": r.id, "round_number": r.round_number, "idea_ids": r.idea_ids,
+         "status": r.status, "results": r.results}
+        for r in rounds
+    ]}
+
+
+@router.get("/api/rounds/{round_id}")
+async def get_round(round_id: str):
+    sr = await db.get_round(round_id)
+    if not sr:
+        raise HTTPException(status_code=404, detail="Round not found")
+    return {"id": sr.id, "round_number": sr.round_number, "idea_ids": sr.idea_ids,
+            "status": sr.status, "results": sr.results}
+
+
+@router.post("/api/rounds/{round_id}/compare")
+async def run_round_comparisons(round_id: str):
+    from itertools import combinations
+
+    from project_forge.engine.compare import compare_ideas
+
+    sr = await db.get_round(round_id)
+    if not sr:
+        raise HTTPException(status_code=404, detail="Round not found")
+
+    # Fetch all ideas in the round
+    ideas = {}
+    for idea_id in sr.idea_ids:
+        idea = await db.get_idea(idea_id)
+        if idea:
+            ideas[idea_id] = idea
+
+    # Run pairwise comparisons
+    results = []
+    for id_a, id_b in combinations(ideas.keys(), 2):
+        comp = compare_ideas(ideas[id_a], ideas[id_b])
+        results.append({
+            "idea_a": id_a,
+            "idea_b": id_b,
+            "winner": comp["winner"],
+            "overlap_score": comp["overlap_score"],
+            "verdict": comp["verdict"],
+            "reason": comp["reason"],
+            "matching_keywords": comp["matching_keywords"],
+        })
+
+    # Auto-deny losers with high overlap
+    for r in results:
+        if r["overlap_score"] >= 0.4 and r["verdict"] in ("similar", "duplicate"):
+            loser_id = r["idea_b"] if r["winner"] == r["idea_a"] else r["idea_a"]
+            loser = await db.get_idea(loser_id)
+            if loser and loser.status not in ("rejected", "archived"):
+                denial = IdeaDenial(
+                    idea_id=loser_id,
+                    reason=f"Auto-denied in round {sr.round_number} comparison: {r['verdict']} "
+                           f"with '{ideas[r['winner']].name}' (overlap: {r['overlap_score']:.0%})",
+                    denied_by="selection_round",
+                )
+                await db.save_denial(denial)
+
+    await db.save_round_results(round_id, results)
+    return {"status": "completed", "results": results}
 
 
 @router.post("/ideas/{idea_id}/scaffold")
@@ -270,7 +377,14 @@ async def projects_list(request: Request):
 
 @router.get("/health")
 async def health():
-    return {"status": "ok", "service": "project-forge"}
+    db_ok = False
+    try:
+        if db._db:
+            await db._db.execute("SELECT 1")
+            db_ok = True
+    except Exception:
+        logger.warning("Health check DB probe failed", exc_info=True)
+    return {"status": "ok" if db_ok else "degraded", "service": "project-forge", "db_ok": db_ok}
 
 
 @router.get("/api/stats")
@@ -314,7 +428,8 @@ async def api_thinktank():
     try:
         all_issues = list_self_issues()
     except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e)) from e
+        logger.error("Failed to list self-issues: %s", e)
+        raise HTTPException(status_code=502, detail="Failed to list issues. Check server logs.") from e
     open_issues = [i for i in all_issues if i.get("state") == "OPEN"]
     closed_issues = [i for i in all_issues if i.get("state") == "CLOSED"]
     all_si = await db.list_ideas(category=IdeaCategory.SELF_IMPROVEMENT, limit=100)
@@ -375,7 +490,8 @@ async def api_repos(org: str | None = None):
         repos = list_org_repos(org)
         return {"repos": repos}
     except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e)) from e
+        logger.error("Failed to list repos for %s: %s", org, e)
+        raise HTTPException(status_code=502, detail="Failed to list repos. Check server logs.") from e
 
 
 @router.post("/api/ideas/{idea_id}/compare")
@@ -396,7 +512,8 @@ async def compare_idea(
     try:
         repo_details = get_repo_details(owner, repo)
     except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=f"Failed to fetch repo: {e}") from e
+        logger.error("Failed to fetch repo %s/%s: %s", owner, repo, e)
+        raise HTTPException(status_code=502, detail="Failed to fetch repo details. Check server logs.") from e
 
     result = compare_idea_to_repo(idea, repo_details)
     result["repo_name"] = repo
@@ -451,7 +568,8 @@ async def add_idea_to_project(
     try:
         issue_url = create_issue(repo=full_repo, title=title, body=body, labels=labels)
     except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=f"Failed to create issue: {e}") from e
+        logger.error("Failed to create issue on %s: %s", full_repo, e)
+        raise HTTPException(status_code=502, detail="Failed to create issue. Check server logs.") from e
 
     repo_url = f"https://github.com/{full_repo}"
     await db.update_idea_status(idea_id, "contributed")
@@ -482,7 +600,9 @@ async def ingest_idea_from_url(request_body: UrlIngestRequest):
 async def ingest_url(request_body: UrlIngestRequest):
     """Generate a project idea from a URL."""
     idea = await ingest_idea_from_url(request_body)
-    await db.save_idea(idea)
+    _, accepted, reason = await filter_and_save(idea, db)
+    if not accepted:
+        return {"filtered": True, "reason": reason, "idea": idea.model_dump()}
     return idea.model_dump()
 
 

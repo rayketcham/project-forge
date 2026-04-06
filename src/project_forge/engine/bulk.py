@@ -5,6 +5,7 @@ import random
 
 from pydantic import BaseModel, Field
 
+from project_forge.engine.dedup import filter_and_save
 from project_forge.engine.generator import IdeaGenerator
 from project_forge.models import Idea, IdeaCategory
 from project_forge.storage.db import Database
@@ -204,7 +205,9 @@ class BulkGenerator:
                     use_contrarian=self.config.include_contrarian and (i % 3 == 1),
                     use_combinatoric=self.config.include_combinatoric and (i % 3 == 2),
                 )
-                await self.db.save_idea(idea)
+                _, accepted, _ = await filter_and_save(idea, self.db)
+                if not accepted:
+                    continue
                 ideas.append(idea)
                 logger.info("Generated %d/%d: %s", len(ideas), count, idea.name)
             except Exception as e:

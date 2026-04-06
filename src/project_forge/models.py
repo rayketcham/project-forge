@@ -107,6 +107,30 @@ class ScaffoldSpec(BaseModel):
     initial_issues: list[dict] = Field(default_factory=list)
 
 
+class IdeaDenial(BaseModel):
+    """Audit trail for idea denial with reasoning."""
+
+    id: str = Field(default_factory=lambda: uuid4().hex[:12])
+    idea_id: str
+    reason: str = Field(min_length=1)
+    denied_by: str | None = None
+    denied_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+RoundStatus = Literal["pending", "in_progress", "completed"]
+
+
+class SelectionRound(BaseModel):
+    """A round of head-to-head idea selection and comparison."""
+
+    id: str = Field(default_factory=lambda: uuid4().hex[:12])
+    round_number: int = Field(ge=1)
+    idea_ids: list[str] = Field(min_length=2)
+    status: RoundStatus = "pending"
+    results: list[dict] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class GenerationRun(BaseModel):
     id: str = Field(default_factory=lambda: uuid4().hex[:12])
     category: IdeaCategory

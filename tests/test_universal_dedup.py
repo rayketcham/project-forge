@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
+from project_forge.engine.dedup import filter_and_save
 from project_forge.models import FilteredIdea, Idea, IdeaCategory
 from project_forge.storage.db import Database
 
@@ -99,7 +100,7 @@ class TestFilteredIdeaModel:
 
 
 class TestUniversalFuzzyDedup:
-    """save_idea should reject near-duplicate taglines in ANY category."""
+    """filter_and_save should reject near-duplicate taglines in ANY category."""
 
     @pytest.mark.asyncio
     async def test_security_tool_near_dup_rejected(self, db):
@@ -109,17 +110,18 @@ class TestUniversalFuzzyDedup:
             "scan PKI infrastructure for certificate issues — enterprise edition",
             category=IdeaCategory.SECURITY_TOOL,
         )
-        await db.save_idea(original)
+        await filter_and_save(original, db)
 
         near_dup = _idea(
             "PKI Scanner V2",
             "scan PKI infrastructure for certificate issues — community edition",
             category=IdeaCategory.SECURITY_TOOL,
         )
-        await db.save_idea(near_dup)
+        _, accepted, _ = await filter_and_save(near_dup, db)
 
+        assert not accepted, "Near-duplicate security-tool idea should be blocked"
         all_ideas = await db.list_ideas(category=IdeaCategory.SECURITY_TOOL, limit=100)
-        assert len(all_ideas) == 1, "Near-duplicate security-tool idea should be blocked"
+        assert len(all_ideas) == 1
         assert all_ideas[0].name == "PKI Scanner V1"
 
     @pytest.mark.asyncio
@@ -130,17 +132,18 @@ class TestUniversalFuzzyDedup:
             "post-quantum lattice-based key exchange implementation — optimized for TLS",
             category=IdeaCategory.PQC_CRYPTOGRAPHY,
         )
-        await db.save_idea(original)
+        await filter_and_save(original, db)
 
         near_dup = _idea(
             "Lattice Key Exchange Hub",
             "post-quantum lattice-based key exchange implementation — optimized for SSH",
             category=IdeaCategory.PQC_CRYPTOGRAPHY,
         )
-        await db.save_idea(near_dup)
+        _, accepted, _ = await filter_and_save(near_dup, db)
 
+        assert not accepted, "Near-duplicate PQC idea should be blocked"
         count = await db.count_ideas()
-        assert count == 1, "Near-duplicate PQC idea should be blocked"
+        assert count == 1
 
     @pytest.mark.asyncio
     async def test_different_ideas_same_category_both_saved(self, db):
@@ -155,8 +158,8 @@ class TestUniversalFuzzyDedup:
             "scan project dependencies for known CVE vulnerabilities",
             category=IdeaCategory.SECURITY_TOOL,
         )
-        await db.save_idea(idea1)
-        await db.save_idea(idea2)
+        await filter_and_save(idea1, db)
+        await filter_and_save(idea2, db)
 
         all_ideas = await db.list_ideas(category=IdeaCategory.SECURITY_TOOL, limit=100)
         assert len(all_ideas) == 2
@@ -174,8 +177,8 @@ class TestUniversalFuzzyDedup:
             "monitor certificates for security compliance issues",
             category=IdeaCategory.COMPLIANCE,
         )
-        await db.save_idea(sec_idea)
-        await db.save_idea(comp_idea)
+        await filter_and_save(sec_idea, db)
+        await filter_and_save(comp_idea, db)
 
         total = await db.count_ideas()
         assert total == 2, "Same tagline in different categories should both save"
@@ -188,7 +191,7 @@ class TestUniversalFuzzyDedup:
             "scan infrastructure for configuration drift",
             category=IdeaCategory.AUTOMATION,
         )
-        await db.save_idea(original)
+        await filter_and_save(original, db)
         await db.update_idea_status(original.id, "rejected")
 
         new_version = _idea(
@@ -196,7 +199,7 @@ class TestUniversalFuzzyDedup:
             "scan infrastructure for configuration drift — improved version",
             category=IdeaCategory.AUTOMATION,
         )
-        await db.save_idea(new_version)
+        await filter_and_save(new_version, db)
 
         active = await db.list_ideas(category=IdeaCategory.AUTOMATION, limit=100)
         non_rejected = [i for i in active if i.status != "rejected"]
@@ -211,15 +214,16 @@ class TestUniversalFuzzyDedup:
             "dashboard UX improvements and accessibility gaps — tailored for reliability",
             category=IdeaCategory.SELF_IMPROVEMENT,
         )
-        await db.save_idea(original)
+        await filter_and_save(original, db)
 
         near_dup = _idea(
             "Dashboard Fix V2",
             "dashboard UX improvements and accessibility gaps — tailored for testing",
             category=IdeaCategory.SELF_IMPROVEMENT,
         )
-        await db.save_idea(near_dup)
+        _, accepted, _ = await filter_and_save(near_dup, db)
 
+        assert not accepted
         all_si = await db.list_ideas(category=IdeaCategory.SELF_IMPROVEMENT, limit=100)
         assert len(all_si) == 1
 
@@ -321,21 +325,21 @@ class TestFilteredIdeaStorage:
 
 
 class TestSaveIdeaAuditTrail:
-    """save_idea should log filtered ideas to the audit trail."""
+    """filter_and_save should log filtered ideas to the audit trail."""
 
     @pytest.mark.asyncio
     async def test_content_hash_dup_logged(self, db):
         """When content_hash dedup blocks an idea, it's logged to filtered_ideas."""
         idea1 = _idea("Original", "original tagline", content_hash="hash_same")
-        await db.save_idea(idea1)
+        await filter_and_save(idea1, db)
 
         idea2 = _idea("Duplicate", "duplicate tagline", content_hash="hash_same")
-        await db.save_idea(idea2)
+        await filter_and_save(idea2, db)
 
         filtered = await db.get_filtered_ideas()
         assert len(filtered) == 1
         assert filtered[0].idea_name == "Duplicate"
-        assert filtered[0].filter_reason == "duplicate:content_hash"
+        assert "content_hash" in filtered[0].filter_reason
 
     @pytest.mark.asyncio
     async def test_tagline_dup_logged_with_score(self, db):
@@ -345,21 +349,21 @@ class TestSaveIdeaAuditTrail:
             "scan infrastructure for drift — enterprise",
             category=IdeaCategory.OBSERVABILITY,
         )
-        await db.save_idea(original)
+        await filter_and_save(original, db)
 
         near_dup = _idea(
             "Scanner V2",
             "scan infrastructure for drift — community",
             category=IdeaCategory.OBSERVABILITY,
         )
-        await db.save_idea(near_dup)
+        await filter_and_save(near_dup, db)
 
         filtered = await db.get_filtered_ideas()
         assert len(filtered) == 1
         assert filtered[0].filter_reason.startswith("duplicate:tagline_similarity:")
-        # Score should be included as a float
-        score_str = filtered[0].filter_reason.split(":")[-1]
-        score = float(score_str)
+        # The reason format ends with "(similar to <id>)" — extract the score part
+        score_part = filtered[0].filter_reason.split("(")[0].strip().split(":")[-1]
+        score = float(score_part)
         assert score >= 0.7
 
     @pytest.mark.asyncio
@@ -370,14 +374,14 @@ class TestSaveIdeaAuditTrail:
             "monitor kubernetes pods for resource exhaustion — production",
             category=IdeaCategory.DEVOPS_TOOLING,
         )
-        await db.save_idea(original)
+        await filter_and_save(original, db)
 
         near_dup = _idea(
             "Monitor V2",
             "monitor kubernetes pods for resource exhaustion — staging",
             category=IdeaCategory.DEVOPS_TOOLING,
         )
-        await db.save_idea(near_dup)
+        await filter_and_save(near_dup, db)
 
         filtered = await db.get_filtered_ideas()
         assert len(filtered) == 1

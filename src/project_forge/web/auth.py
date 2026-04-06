@@ -1,5 +1,7 @@
 """Bearer token authentication middleware for Project Forge."""
 
+import hmac
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -25,9 +27,9 @@ class BearerTokenMiddleware(BaseHTTPMiddleware):
         if request.method in _SKIP_METHODS:
             return await call_next(request)
 
-        # Validate Authorization header.
+        # Validate Authorization header using constant-time comparison.
         auth_header = request.headers.get("Authorization", "")
-        if auth_header == f"Bearer {settings.api_token}":
+        if hmac.compare_digest(auth_header, f"Bearer {settings.api_token}"):
             return await call_next(request)
 
         return JSONResponse(

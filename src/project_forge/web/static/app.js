@@ -1,10 +1,6 @@
-// === Auth Token ===
-// Read Bearer token from server-injected <meta> tag for POST requests
+// === Auth Headers ===
+// Returns headers for API requests (same-origin, no bearer token needed)
 function getAuthHeaders() {
-    var meta = document.querySelector('meta[name="api-token"]');
-    if (meta && meta.content) {
-        return { 'Authorization': 'Bearer ' + meta.content };
-    }
     return {};
 }
 

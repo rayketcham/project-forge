@@ -11,6 +11,7 @@ Fix: Fuzzy dedup on tagline similarity for self-improvement ideas at save time.
 import pytest
 import pytest_asyncio
 
+from project_forge.engine.dedup import filter_and_save
 from project_forge.models import Idea, IdeaCategory
 from project_forge.storage.db import Database
 
@@ -110,18 +111,18 @@ class TestTaglineSimilarity:
 
 
 class TestSelfImprovementDedup:
-    """save_idea should reject near-duplicate self-improvement ideas."""
+    """filter_and_save should reject near-duplicate self-improvement ideas."""
 
     @pytest.mark.asyncio
     async def test_exact_duplicate_tagline_rejected(self, db):
         """Saving a SI idea with an identical tagline to an existing one is skipped."""
         original = _si_idea("Dashboard Fix V1", "dashboard UX improvements and accessibility gaps")
-        await db.save_idea(original)
+        await filter_and_save(original, db)
 
         duplicate = _si_idea("Dashboard Fix V2", "dashboard UX improvements and accessibility gaps")
-        await db.save_idea(duplicate)
+        _, accepted, _ = await filter_and_save(duplicate, db)
 
-        # Should still return the idea (silent skip), but NOT store it
+        assert not accepted
         all_si = await db.list_ideas(category=IdeaCategory.SELF_IMPROVEMENT, limit=100)
         assert len(all_si) == 1
         assert all_si[0].name == "Dashboard Fix V1"
@@ -133,14 +134,15 @@ class TestSelfImprovementDedup:
             "Dashboard Ux Improvements And Suite",
             "dashboard UX improvements and accessibility gaps — tailored for reliability engineering",
         )
-        await db.save_idea(original)
+        await filter_and_save(original, db)
 
         near_dup = _si_idea(
             "Dashboard Ux Improvements And Engine",
             "dashboard UX improvements and accessibility gaps — tailored for test engineering",
         )
-        await db.save_idea(near_dup)
+        _, accepted, _ = await filter_and_save(near_dup, db)
 
+        assert not accepted
         all_si = await db.list_ideas(category=IdeaCategory.SELF_IMPROVEMENT, limit=100)
         assert len(all_si) == 1
 
@@ -149,8 +151,8 @@ class TestSelfImprovementDedup:
         """Two genuinely different SI ideas should both be saved."""
         idea1 = _si_idea("Rate Limiting", "add rate limiting to API endpoints")
         idea2 = _si_idea("Structured Logging", "add structured logging with correlation IDs")
-        await db.save_idea(idea1)
-        await db.save_idea(idea2)
+        await filter_and_save(idea1, db)
+        await filter_and_save(idea2, db)
 
         all_si = await db.list_ideas(category=IdeaCategory.SELF_IMPROVEMENT, limit=100)
         assert len(all_si) == 2
@@ -160,19 +162,20 @@ class TestSelfImprovementDedup:
         """Regular (non-SI) ideas with identical taglines are now deduped (universal dedup)."""
         idea1 = _regular_idea("PKI Scanner V1", "scan PKI infrastructure for cert issues")
         idea2 = _regular_idea("PKI Scanner V2", "scan PKI infrastructure for cert issues")
-        await db.save_idea(idea1)
-        await db.save_idea(idea2)
+        await filter_and_save(idea1, db)
+        _, accepted, _ = await filter_and_save(idea2, db)
 
+        assert not accepted, "Universal dedup should block near-duplicate non-SI ideas"
         all_ideas = await db.list_ideas(limit=100)
-        assert len(all_ideas) == 1, "Universal dedup should block near-duplicate non-SI ideas"
+        assert len(all_ideas) == 1
 
     @pytest.mark.asyncio
     async def test_cross_category_dedup_scoped(self, db):
         """A regular idea with a similar tagline to an SI idea should still save (different category)."""
         si = _si_idea("Dashboard Fix", "dashboard UX improvements")
         regular = _regular_idea("Dashboard Scanner", "dashboard UX improvements")
-        await db.save_idea(si)
-        await db.save_idea(regular)
+        await filter_and_save(si, db)
+        await filter_and_save(regular, db)
 
         all_ideas = await db.list_ideas(limit=100)
         assert len(all_ideas) == 2, "Dedup is scoped to same category"
