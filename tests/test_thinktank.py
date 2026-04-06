@@ -1,6 +1,7 @@
 """Tests for the Think Tank feature — surfaces Project Forge's own improvement ideas."""
 
 import json
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -8,6 +9,8 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from project_forge.web.app import app, db
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 # --- Fixtures ---
 
@@ -461,25 +464,19 @@ class TestCIQueueWorkflow:
 
     def test_ci_yaml_has_queue_check_job(self):
         """ci.yml must contain a self-improvement-queue job."""
-        from pathlib import Path
-
         import yaml
 
-        ci_path = Path("/opt/vmdata/project-forge/.github/workflows/ci.yml")
+        ci_path = PROJECT_ROOT / ".github/workflows/ci.yml"
         ci = yaml.safe_load(ci_path.read_text())
         assert "self-improvement-queue" in ci["jobs"], "CI workflow missing 'self-improvement-queue' job"
 
     def test_ci_queue_job_checks_ci_queue_label(self):
         """The queue check job must query for the ci-queue label."""
-        from pathlib import Path
-
-        ci_text = Path("/opt/vmdata/project-forge/.github/workflows/ci.yml").read_text()
+        ci_text = (PROJECT_ROOT / ".github/workflows/ci.yml").read_text()
         assert "ci-queue" in ci_text, "CI workflow must reference 'ci-queue' label"
 
     def test_ci_queue_job_fails_on_open_issues(self):
         """The queue check job must exit non-zero when open ci-queue issues exist."""
-        from pathlib import Path
-
-        ci_text = Path("/opt/vmdata/project-forge/.github/workflows/ci.yml").read_text()
+        ci_text = (PROJECT_ROOT / ".github/workflows/ci.yml").read_text()
         # Should contain logic that fails when count > 0
         assert "exit 1" in ci_text or "::error" in ci_text, "CI queue job must fail when open ci-queue issues exist"

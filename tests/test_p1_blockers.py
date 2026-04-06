@@ -20,6 +20,8 @@ from httpx import ASGITransport, AsyncClient
 from project_forge.models import Idea, IdeaCategory
 from project_forge.web.app import app, db
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
 
 @pytest_asyncio.fixture
 async def client(tmp_path):
@@ -114,12 +116,12 @@ class TestSelfImproveRunnerEntryPoint:
         assert callable(self_improve_runner.main)
 
     def test_pyproject_has_forge_self_improve_script(self):
-        pyproject = Path("/opt/vmdata/project-forge/pyproject.toml")
+        pyproject = PROJECT_ROOT / "pyproject.toml"
         content = pyproject.read_text()
         assert "forge-self-improve" in content
 
     def test_ci_build_job_checks_forge_self_improve(self):
-        ci = Path("/opt/vmdata/project-forge/.github/workflows/ci.yml")
+        ci = PROJECT_ROOT / ".github/workflows/ci.yml"
         content = ci.read_text()
         assert "forge-self-improve" in content
 
@@ -207,7 +209,7 @@ class TestCIJobOrdering:
     """self-improvement-queue job must depend on test job."""
 
     def test_self_improvement_queue_needs_test(self):
-        ci_path = Path("/opt/vmdata/project-forge/.github/workflows/ci.yml")
+        ci_path = PROJECT_ROOT / ".github/workflows/ci.yml"
         ci = yaml.safe_load(ci_path.read_text())
         job = ci["jobs"]["self-improvement-queue"]
         needs = job.get("needs", [])
