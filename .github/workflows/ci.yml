@@ -15,6 +15,7 @@ env:
         major=$(echo "$version" | cut -d. -f1)
         minor=$(echo "$version" | cut -d. -f2)
         if [ "$major" -ge 3 ] && [ "$minor" -ge 12 ]; then
+          PY="$candidate"
           echo "PY=$candidate" >> "$GITHUB_ENV"
           echo "Found $candidate ($version)"
           break
